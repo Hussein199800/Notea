@@ -1,0 +1,6 @@
+{
+  "name": "Arabic Notes",
+  "description": "Arabic-first offline & cloud-synced notes app with encryption, app/note locking, checklists, and RTL design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

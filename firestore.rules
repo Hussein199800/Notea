@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserSettings(data, userId) {
+      return data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.appLockEnabled is bool &&
+             data.appPinHash is string && data.appPinHash.size() <= 128 &&
+             data.languageCode is string && (data.languageCode == 'en' || data.languageCode == 'ar') &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidNote(data, userId) {
+      return data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.content is string && data.content.size() <= 20000 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.colorIndex is int && data.colorIndex >= 0 && data.colorIndex <= 5 &&
+             data.isPinned is bool &&
+             data.isLocked is bool &&
+             data.notePinHash is string && data.notePinHash.size() <= 128 &&
+             data.lockHint is string && data.lockHint.size() <= 100 &&
+             data.isArchived is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']) &&
+                       isValidUserSettings(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserSettings(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /notes/{noteId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(noteId) &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'content', 'category', 'colorIndex',
+                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
+                           'isArchived', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'content', 'category', 'colorIndex',
+                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
+                           'isArchived', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidNote(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(noteId) &&
+                         isValidNote(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'content', 'category', 'colorIndex',
+                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
+                           'isArchived', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && existing().userId == request.auth.uid;
+      }
+    }
+  }
+}

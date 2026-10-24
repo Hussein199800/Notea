@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Arabic Notes</string>
+    <string name="app_tagline">ملاحظات عربية وإنجليزية متزامنة سحابياً ومشفرة مع قفل التطبيق والملاحظات</string>
+    <string name="sign_in_with_google">تسجيل الدخول عبر Google</string>
+    <string name="new_note">ملاحظة جديدة</string>
+    <string name="search_notes_hint">ابحث في الملاحظات أو الوسوم أو المهام...</string>
+    <string name="lock_app">قفل التطبيق</string>
+    <string name="unlock_vault">فتح الملاحظات</string>
+    <string name="switch_language">EN / العربية</string>
+    <string name="settings_title">الإعدادات والأمان</string>
+    <string name="sign_out">تسجيل الخروج</string>
+</resources>

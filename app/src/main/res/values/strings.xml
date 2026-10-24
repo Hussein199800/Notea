@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Arabic Notes</string>
+    <string name="app_tagline">Offline &amp; cloud-synced Arabic &amp; English notes with encryption &amp; locking</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="new_note">New Note</string>
+    <string name="search_notes_hint">Search notes, tags, or checklists...</string>
+    <string name="lock_app">Lock App</string>
+    <string name="unlock_vault">Unlock Notes</string>
+    <string name="switch_language">العربية / EN</string>
+    <string name="settings_title">Settings &amp; Security</string>
+    <string name="sign_out">Sign Out</string>
+</resources>

@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Per-user cross-device preferences including app lock status, PIN hash, and UI language.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the authenticated owner (must match request.auth.uid)."
+        },
+        "appLockEnabled": {
+          "type": "boolean",
+          "description": "Whether the master app lock is enabled on startup."
+        },
+        "appPinHash": {
+          "type": "string",
+          "description": "SHA-256 hash of the user's master app PIN, or empty string if unset."
+        },
+        "languageCode": {
+          "type": "string",
+          "enum": ["en", "ar"],
+          "description": "Preferred UI language code ('en' for English, 'ar' for Arabic)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last settings update (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "appLockEnabled",
+        "appPinHash",
+        "languageCode",
+        "updatedAt"
+      ]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A private personal note synced across the user's devices with optional per-note PIN lock.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the note owner (must match request.auth.uid)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Note title (1 to 200 characters)."
+        },
+        "content": {
+          "type": "string",
+          "description": "Note body content (0 to 20000 characters)."
+        },
+        "category": {
+          "type": "string",
+          "description": "Category identifier for organizing notes (1 to 50 characters)."
+        },
+        "colorIndex": {
+          "type": "integer",
+          "description": "Palette index (0 to 5) for card visual styling."
+        },
+        "isPinned": {
+          "type": "boolean",
+          "description": "Whether the note is pinned to the top of the vault."
+        },
+        "isLocked": {
+          "type": "boolean",
+          "description": "Whether this individual note is locked behind a PIN."
+        },
+        "notePinHash": {
+          "type": "string",
+          "description": "SHA-256 hash of the individual note PIN (up to 128 chars)."
+        },
+        "lockHint": {
+          "type": "string",
+          "description": "Optional hint displayed when the note is locked (up to 100 chars)."
+        },
+        "isArchived": {
+          "type": "boolean",
+          "description": "Whether the note is archived."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the note was created (clients must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the note was last modified (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "content",
+        "category",
+        "colorIndex",
+        "isPinned",
+        "isLocked",
+        "notePinHash",
+        "lockHint",
+        "isArchived",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserSettings"
+      },
+      "description": "Stores per-user vault lock settings and language preferences."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": {
+        "$ref": "#/entities/Note"
+      },
+      "description": "Stores private synced notes belonging exclusively to the user."
+    }
+  }
+}
