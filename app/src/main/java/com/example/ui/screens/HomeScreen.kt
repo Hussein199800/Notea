@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -224,14 +225,14 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                 // Search bar
                 Surface(
                     shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(56.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 56.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                         IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Rounded.Menu, s.menu) }
                         Box(Modifier.weight(1f)) {
-                            if (filter.query.isEmpty()) Text(s.searchHint, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (filter.query.isEmpty()) Text(s.searchHint, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                             BasicTextField(
-                                value = filter.query, onValueChange = { q -> vm.setFilter { it.copy(query = q) } }, singleLine = true,
+                                value = filter.query, onValueChange = { q -> vm.setFilter { it.copy(query = q.replace("\n", " ")) } }, maxLines = 4,
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth()
                             )
@@ -245,7 +246,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                 }
                 // Title row
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(viewTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(viewTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     if (filter.isSearching) Text(s.results(state.pinned.size + state.others.size), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     var sortMenu by remember { mutableStateOf(false) }
@@ -269,8 +270,8 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                             leadingIcon = { Icon(Icons.Rounded.Close, null, Modifier.size(16.dp)) }) }
                     }
                 }
-                if (filter.view == HomeView.TRASH) Text(s.trashBanner, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                if (filter.view == HomeView.TRASH) com.example.ui.components.ExpandableText(s.trashBanner, collapsedLines = 2, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
 
                 val empty = !state.loading && state.pinned.isEmpty() && state.others.isEmpty()
                 if (empty) {
@@ -394,7 +395,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
         var confirmDelete by remember(m.note.id) { mutableStateOf(false) }
         ModalBottomSheet(onDismissRequest = { actionsFor = null }) {
             Column(Modifier.padding(bottom = 28.dp)) {
-                Text(m.note.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(m.note.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 val close = { actionsFor = null }
                 if (m.note.trashedAt != null) {
@@ -432,9 +433,9 @@ private fun Header(text: String) {
 @Composable
 private fun DrawerItem(icon: ImageVector, label: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     NavigationDrawerItem(
-        icon = { Icon(icon, null) }, label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }, selected = selected, onClick = onClick,
+        icon = { Icon(icon, null) }, label = { Text(label, modifier = Modifier.padding(vertical = 6.dp)) }, selected = selected, onClick = onClick,
         badge = if (onLongClick != null) { { IconButton(onClick = onLongClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.MoreVert, null, Modifier.size(18.dp)) } } } else null,
-        modifier = Modifier.padding(horizontal = 12.dp)
+        modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 56.dp)
     )
 }
 
@@ -446,6 +447,6 @@ fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(18.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
 }

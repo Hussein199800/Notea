@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -78,6 +81,41 @@ import com.example.ui.theme.noteColor
 import com.example.ui.viewmodel.NoteCardModel
 import kotlinx.coroutines.launch
 
+/**
+ * Project-wide rule: text always wraps (never cut to one line with "…"). Long text is collapsed
+ * to [collapsedLines] and gets a "Show more / Show less" toggle — only when it actually overflows.
+ */
+@Composable
+fun ExpandableText(
+    text: String,
+    modifier: Modifier = Modifier,
+    collapsedLines: Int = 4,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    textDecoration: androidx.compose.ui.text.style.TextDecoration? = null
+) {
+    val s = LocalStrings.current
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(text) { mutableStateOf(false) }
+    var overflows by remember(text) { mutableStateOf(false) }
+    Column(modifier.animateContentSize()) {
+        Text(
+            text, style = style, color = color, fontWeight = fontWeight, textDecoration = textDecoration,
+            maxLines = if (expanded) Int.MAX_VALUE else collapsedLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow }
+        )
+        if (overflows || expanded) {
+            Text(
+                if (expanded) s.showLess else s.showMore,
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { expanded = !expanded }
+                    .heightIn(min = 40.dp).padding(vertical = 10.dp, horizontal = 2.dp)
+            )
+        }
+    }
+}
+
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -122,7 +160,7 @@ fun PreferenceRow(
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle != null) ExpandableText(subtitle, collapsedLines = 3, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (trailing != null) { Spacer(Modifier.width(12.dp)); trailing() }
     }
@@ -182,8 +220,7 @@ fun NoteCard(
                 Row(verticalAlignment = Alignment.Top) {
                     Text(
                         n.title.ifBlank { if (model.preview.isBlank() && model.details.checklist.isEmpty()) s.untitled else "" },
-                        style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)
                     )
                     if (n.isPinned) Icon(Icons.Rounded.PushPin, s.pinned, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                     if (n.isFavorite) Icon(Icons.Rounded.Star, s.favorites, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
@@ -196,22 +233,27 @@ fun NoteCard(
                     }
                 } else {
                     if (model.preview.isNotBlank()) {
-                        Text(model.preview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        ExpandableText(model.preview, collapsedLines = 6, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val items = model.details.sortedChecklist
                     if (items.isNotEmpty()) {
-                        items.take(4).forEach { item ->
+                        var allItems by androidx.compose.runtime.saveable.rememberSaveable(n.id) { mutableStateOf(false) }
+                        (if (allItems) items else items.take(4)).forEach { item ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(if (item.checked) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank, null, Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary.copy(alpha = if (item.checked) 0.5f else 1f))
                                 Spacer(Modifier.width(6.dp))
-                                Text(item.text, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                Text(item.text, style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.checked) 0.5f else 0.9f))
                             }
                         }
-                        if (items.size > 4) Text(s.completedItems(items.count { it.checked }, items.size), style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (items.size > 4) {
+                            Text(s.completedItems(items.count { it.checked }, items.size), style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (allItems) s.showLess else s.showAllItems(items.size), style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { allItems = !allItems }.padding(vertical = 8.dp))
+                        }
                     }
                 }
                 val reminder = model.details.activeReminder
@@ -238,7 +280,7 @@ fun MetaPill(icon: ImageVector?, text: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) { Icon(icon, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(4.dp)) }
-        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -261,7 +303,7 @@ fun ConfirmDialog(title: String, text: String, confirm: String, destructive: Boo
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { Text(text) },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { ExpandableText(text, collapsedLines = 8) } },
         confirmButton = {
             TextButton(onClick = { onConfirm(); onDismiss() }) {
                 Text(confirm, color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
@@ -278,7 +320,7 @@ fun TextInputDialog(title: String, label: String, initial: String = "", confirm:
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+        text = { OutlinedTextField(text, { text = it.replace("\n", " ") }, label = { Text(label) }, maxLines = 4, modifier = Modifier.fillMaxWidth()) },
         confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onConfirm(text.trim()); onDismiss() }) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
@@ -311,7 +353,7 @@ fun SetPinDialog(title: String, withHint: Boolean, onSet: (pin: String, hint: St
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SecretField(pin, { if (it.length <= 8 && it.all(Char::isDigit)) pin = it }, s.newPin, numeric = true)
                 SecretField(confirmPin, { if (it.length <= 8 && it.all(Char::isDigit)) confirmPin = it }, s.confirmPin, numeric = true, isError = error != null)
-                if (withHint) OutlinedTextField(hint, { hint = it.take(60) }, label = { Text(s.pinHint) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (withHint) OutlinedTextField(hint, { hint = it.take(60).replace("\n", " ") }, label = { Text(s.pinHint) }, maxLines = 3, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
@@ -375,7 +417,7 @@ fun PassphraseDialog(create: Boolean, title: String, body: String, submit: suspe
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ExpandableText(body, collapsedLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SecretField(p1, { p1 = it; error = null }, s.passphrase, isError = error != null)
                 if (create) SecretField(p2, { p2 = it; error = null }, s.confirmPassphrase, isError = error != null)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

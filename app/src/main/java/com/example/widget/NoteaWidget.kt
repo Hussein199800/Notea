@@ -58,7 +58,7 @@ class NoteaWidget : GlanceAppWidget() {
                 WidgetNote(
                     it.note.id,
                     it.note.title.ifBlank { if (arabic) "بلا عنوان" else "Untitled" },
-                    if (it.note.isLocked) (if (arabic) "🔒 ملاحظة مقفلة" else "🔒 Locked note") else MarkdownEngine.plain(it.note.body).take(90).replace('\n', ' ')
+                    if (it.note.isLocked) (if (arabic) "🔒 ملاحظة مقفلة" else "🔒 Locked note") else MarkdownEngine.plain(it.note.body).take(240).replace('\n', ' ')
                 )
             }
         provideContent { GlanceTheme { Content(context, notes, arabic) } }
@@ -90,8 +90,8 @@ class NoteaWidget : GlanceAppWidget() {
                                 .putExtra(MainActivity.EXTRA_NOTE_ID, n.id).setData(android.net.Uri.parse("notea://note/${n.id}"))
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)))
                     ) {
-                        Text(n.title, style = TextStyle(color = ink, fontWeight = FontWeight.Medium), maxLines = 1)
-                        if (n.preview.isNotBlank()) Text(n.preview, style = TextStyle(color = soft, fontSize = 12.sp), maxLines = 1)
+                        Text(n.title, style = TextStyle(color = ink, fontWeight = FontWeight.Medium), maxLines = 2)
+                        if (n.preview.isNotBlank()) Text(n.preview, style = TextStyle(color = soft, fontSize = 12.sp), maxLines = 3)
                     }
                 }
             }

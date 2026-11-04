@@ -325,7 +325,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                     )
                     val url = MarkdownEngine.urlAt(st.body.text, st.body.selection.start)
                     AnimatedVisibility(url != null) {
-                        AssistChip(onClick = { url?.let { FileOpener.openUrl(context, it) } }, label = { Text(url.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        AssistChip(onClick = { url?.let { FileOpener.openUrl(context, it) } }, label = { Text(url.orEmpty(), modifier = Modifier.padding(vertical = 6.dp)) },
                             leadingIcon = { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp)) })
                     }
                     if (st.checklist.isNotEmpty()) ChecklistSection(vm, st.checklist, readOnly)
@@ -540,13 +540,13 @@ private fun AttachmentsSection(vm: EditorViewModel, items: List<AttachmentEntity
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(if (a.kind == AttachmentKind.LINK) a.linkTitle.ifBlank { a.url } else a.displayName, style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            fontWeight = FontWeight.Medium)
                         val sub = when (a.kind) {
                             AttachmentKind.LINK -> a.linkDescription.ifBlank { a.url }
                             AttachmentKind.AUDIO -> "%d:%02d".format(a.durationMs / 60000, (a.durationMs / 1000) % 60)
                             else -> android.text.format.Formatter.formatShortFileSize(context, a.sizeBytes)
                         }
-                        Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        com.example.ui.components.ExpandableText(sub, collapsedLines = 3, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (!readOnly) IconButton(onClick = { confirmRemove = a }) { Icon(Icons.Rounded.Close, s.removeAttachment, Modifier.size(18.dp)) }
                 }
@@ -568,7 +568,7 @@ private fun TagEditor(tags: List<String>, onChange: (List<String>) -> Unit) {
         }
         OutlinedTextField(input, { v ->
             if (v.endsWith(",") || v.endsWith("،") || v.endsWith(" ")) { val t = v.dropLast(1).trim().removePrefix("#"); if (t.isNotBlank()) onChange(tags + t); input = "" } else input = v
-        }, label = { Text(s.tagHint) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        }, label = { Text(s.tagHint) }, maxLines = 3, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { val t = input.trim().removePrefix("#"); if (t.isNotBlank()) onChange(tags + t); input = "" }))
     }
@@ -582,8 +582,8 @@ private fun LinkDialog(onDismiss: () -> Unit, onInsert: (String, String) -> Unit
     val valid = Regex("^https?://[^\\s]+\\.[^\\s]+").matches(url.trim())
     AlertDialog(onDismissRequest = onDismiss, title = { Text(s.addLink) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(url, { url = it }, label = { Text(s.linkUrl) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(label, { label = it }, label = { Text(s.linkText) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(url, { url = it.replace("\n", "") }, label = { Text(s.linkUrl) }, maxLines = 4, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(label, { label = it.replace("\n", " ") }, label = { Text(s.linkText) }, maxLines = 3, modifier = Modifier.fillMaxWidth())
             Text(s.linkPreviewNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }, confirmButton = {
@@ -620,8 +620,8 @@ private fun HistorySheet(vm: EditorViewModel, onDismiss: () -> Unit) {
                 Text(r.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleLarge)
                 when (dec) {
                     is DecryptResult.Plain -> {
-                        Text(MarkdownEngine.plain(dec.body).take(3000), style = MaterialTheme.typography.bodyMedium, maxLines = 18, overflow = TextOverflow.Ellipsis)
-                        dec.checklist.take(10).forEach { Text((if (it.checked) "☑ " else "☐ ") + it.text, style = MaterialTheme.typography.bodySmall) }
+                        com.example.ui.components.ExpandableText(MarkdownEngine.plain(dec.body), collapsedLines = 14, style = MaterialTheme.typography.bodyMedium)
+                        dec.checklist.forEach { Text((if (it.checked) "☑ " else "☐ ") + it.text, style = MaterialTheme.typography.bodySmall) }
                         Row {
                             TextButton(onClick = { selected = null }) { Text(s.back) }
                             Spacer(Modifier.weight(1f))

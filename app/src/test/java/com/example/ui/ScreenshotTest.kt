@@ -93,12 +93,12 @@ class ScreenshotTest {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     NoteCard(card("1", if (arabic) "خطة الأسبوع" else "Weekly plan", if (arabic) "مراجعة المشروع مع الفريق، وتحضير العرض النهائي." else "Review the project with the team and prepare the final demo.", 2, pinned = true, tags = listOf(if (arabic) "عمل" else "work")), false, onClick = {}, onLongClick = {})
-                    NoteCard(card("2", if (arabic) "قائمة التسوق" else "Groceries", "", 1, checklist = listOf((if (arabic) "خبز" else "Bread") to true, (if (arabic) "حليب" else "Milk") to false, (if (arabic) "تمر" else "Dates") to false)), false, onClick = {}, onLongClick = {})
+                    NoteCard(card("2", if (arabic) "قائمة التسوق" else "Groceries", "", 1, checklist = listOf((if (arabic) "خبز" else "Bread") to true, (if (arabic) "حليب طازج قليل الدسم من المتجر القريب" else "Fresh low-fat milk from the nearby shop") to false, (if (arabic) "تمر" else "Dates") to false, (if (arabic) "قهوة" else "Coffee") to false, (if (arabic) "زيت زيتون" else "Olive oil") to false, (if (arabic) "عسل" else "Honey") to false)), false, onClick = {}, onLongClick = {})
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     NoteCard(card("3", if (arabic) "حساب البنك" else "Bank", "", 0, locked = true), false, onClick = {}, onLongClick = {})
                     NoteCard(card("4", if (arabic) "أفكار" else "Ideas", if (arabic) "تطبيق ملاحظات عربي يعمل دون إنترنت ✨" else "An offline-first Arabic notes app ✨", 4, reminder = 1_800_000_000_000), false, onClick = {}, onLongClick = {})
-                    NoteCard(card("5", "", if (arabic) "اقتباس: «العلم في الصغر كالنقش على الحجر»" else "Quote of the day", 5), false, onClick = {}, onLongClick = {})
+                    NoteCard(card("5", "", (if (arabic) "اقتباس: «العلم في الصغر كالنقش على الحجر». " else "Quote of the day. ").repeat(8), 5), false, onClick = {}, onLongClick = {})
                 }
             }
             SectionLabel(s.security)

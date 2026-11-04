@@ -114,7 +114,7 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
 
     private fun toCard(d: NoteWithDetails): NoteCardModel {
         val n = d.note
-        val preview = if (n.isLocked) "" else MarkdownEngine.plain(n.body).take(400)
+        val preview = if (n.isLocked) "" else MarkdownEngine.plain(n.body).take(6000)
         val img = if (n.isLocked) null else d.attachments.firstOrNull { it.kind == AttachmentKind.IMAGE && !it.encrypted && it.localPath.isNotBlank() }
             ?.let { repo.attachments.file(uid, it.localPath).path }
         return NoteCardModel(d, preview, img, d.attachments.groupingBy { it.kind }.eachCount())

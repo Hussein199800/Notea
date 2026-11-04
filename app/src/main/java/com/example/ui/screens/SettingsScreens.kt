@@ -86,6 +86,7 @@ import com.example.data.importer.ImportAction
 import com.example.data.importer.ImportSource
 import com.example.data.importer.ImportWarning
 import com.example.ui.components.ConfirmDialog
+import com.example.ui.components.ExpandableText
 import com.example.ui.components.PassphraseDialog
 import com.example.ui.components.PreferenceGroup
 import com.example.ui.components.PreferenceRow
@@ -193,8 +194,8 @@ fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> U
                 PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (pending > 0) s.syncPending(pending) else s.syncUpToDate) {
                     TextButton(onClick = { session.syncNow() }) { Text(s.syncNow) }
                 }
-                Text(s.syncInfo + " " + s.attachmentsLocalNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 72.dp, end = 18.dp, bottom = 14.dp))
+                ExpandableText(s.syncInfo + " " + s.attachmentsLocalNote, collapsedLines = 2, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 72.dp, end = 18.dp, bottom = 14.dp))
             }
         }
         item {
@@ -230,7 +231,7 @@ fun ImportCenterScreen(session: SessionViewModel, data: DataViewModel) {
     fun pick(src: ImportSource) { source = src; picker.launch(arrayOf("*/*")) }
 
     PageScaffold(s.importCenter, onBack = { session.back() }) {
-        item { Text(s.importIntro, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { ExpandableText(s.importIntro, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), collapsedLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { SourceCard(s.samsungNotes, s.samsungSteps) { FilledTonalButton(onClick = { pick(ImportSource.SAMSUNG) }) { Text(s.chooseFiles) } } }
         item {
             SourceCard(s.xiaomiNotes, s.xiaomiSteps) {
@@ -253,13 +254,14 @@ fun ImportCenterScreen(session: SessionViewModel, data: DataViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SourceCard(title: String, steps: String, actions: @Composable () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(steps, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.CenterVertically) { actions() }
+            ExpandableText(steps, collapsedLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(verticalArrangement = Arrangement.Center) { actions() }
         }
     }
 }
@@ -332,7 +334,7 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
                     if (p.source != ImportSource.BACKUP) Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(intoFolder, { intoFolder = it }); Text(s.importIntoFolder)
                     }
-                    if (intoFolder) OutlinedTextField(folderName, { folderName = it }, singleLine = true, label = { Text(s.folderName) }, modifier = Modifier.fillMaxWidth())
+                    if (intoFolder) OutlinedTextField(folderName, { folderName = it.replace("\n", " ") }, maxLines = 3, label = { Text(s.folderName) }, modifier = Modifier.fillMaxWidth())
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { data.setAll(true) }) { Text(s.selectAll) }
                         Spacer(Modifier.weight(1f))
@@ -358,7 +360,7 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
                             data.setAction(c.key, if (on) (if (c.duplicate != DuplicateKind.NONE) ImportAction.KEEP_BOTH else ImportAction.IMPORT) else ImportAction.SKIP)
                         })
                         Column(Modifier.weight(1f)) {
-                            Text(c.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(c.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleSmall)
                             val meta = listOfNotNull(
                                 c.updatedAt?.let { s.date(it, false) },
                                 if (c.checklist.isNotEmpty()) "${s.num(c.checklist.size)} ${s.typeChecklist}" else null,
@@ -368,8 +370,8 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
                             if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    val bodyPreview = com.example.ui.editor.MarkdownEngine.plain(c.body).take(160)
-                    if (bodyPreview.isNotBlank()) Text(bodyPreview, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                    val bodyPreview = com.example.ui.editor.MarkdownEngine.plain(c.body).take(20_000)
+                    if (bodyPreview.isNotBlank()) ExpandableText(bodyPreview, collapsedLines = 3, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 48.dp))
                     c.warnings.forEach { w -> Text("⚠ " + s.warning(w), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 48.dp, top = 4.dp)) }
                     if (c.duplicate != DuplicateKind.NONE) {
@@ -417,7 +419,7 @@ fun BackupScreen(session: SessionViewModel, data: DataViewModel) {
         item {
             SectionLabel(s.exportBackup)
             PreferenceGroup {
-                Text(s.exportBackupDesc, Modifier.padding(18.dp, 14.dp, 18.dp, 4.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ExpandableText(s.exportBackupDesc, Modifier.padding(18.dp, 14.dp, 18.dp, 4.dp), collapsedLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SwitchRow(Icons.Rounded.EnhancedEncryption, s.encryptBackup, s.backupPasswordInfo, encrypt) { encrypt = it }
                 if (encrypt) Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecretField(pw1, { pw1 = it }, s.backupPassword)
