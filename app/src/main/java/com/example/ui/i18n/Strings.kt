@@ -18,6 +18,18 @@ class Strings(val isArabic: Boolean) {
     val signInFailed = t("تعذّر تسجيل الدخول", "Sign-in failed")
     val signInNote = t("تُحفظ ملاحظاتك على جهازك أولاً ثم تُزامَن مع حسابك.", "Notes are saved on your device first, then synced to your account.")
     val signOut = t("تسجيل الخروج", "Sign out")
+    val useWithoutAccount = t("استخدام بدون حساب", "Use without an account")
+    val withoutAccountNote = t("تبقى ملاحظاتك على هذا الجهاز فقط. يمكنك تسجيل الدخول لاحقاً للمزامنة دون أن تفقد شيئاً.", "Your notes stay on this device only. You can sign in later to sync without losing anything.")
+    val localAccount = t("على هذا الجهاز فقط (بدون حساب)", "On this device only (no account)")
+    val signInToSync = t("تسجيل الدخول للمزامنة", "Sign in to sync")
+    val syncNotConfigured = t("المزامنة السحابية غير مفعّلة في هذا الإصدار. احمِ ملاحظاتك بالنسخ الاحتياطي، والنسخة التلقائية اليومية تعمل.", "Cloud sync isn't enabled in this build. Protect your notes with backups; the daily automatic backup is on.")
+    val localSyncInfo = t("ملاحظاتك محفوظة على هذا الجهاز. سجّل الدخول لمزامنتها بين أجهزتك، وستنتقل كلها إلى حسابك.", "Your notes are saved on this device. Sign in to sync them across devices; they will all move to your account.")
+    val linkingTitle = t("جارٍ نقل ملاحظاتك إلى حسابك…", "Moving your notes to your account…")
+    val linkNeedsPassphrase = t("حسابك يملك خزنة تشفير مختلفة. أدخل عبارة مرورها لنقل ملاحظاتك المقفلة إليها.", "Your account already has a different encryption vault. Enter its passphrase to move your locked notes into it.")
+    val linkNeedsInternet = t("يلزم اتصال بالإنترنت لنقل ملاحظاتك إلى حسابك. لن يُحذف شيء.", "An internet connection is needed to move your notes to your account. Nothing will be deleted.")
+    val retry = t("إعادة المحاولة", "Retry")
+    val later = t("لاحقاً", "Later")
+    val linkDone = { n: Int -> t("نُقلت ${num(n)} ملاحظة إلى حسابك", "Moved $n notes to your account") }
     val signOutConfirm = t("ستبقى ملاحظاتك محفوظة على هذا الجهاز، وتعود عند تسجيل الدخول بالحساب نفسه.", "Your notes stay on this device and come back when you sign in with the same account.")
     val language = t("اللغة", "Language")
     val switchLanguage = t("English", "العربية")
@@ -232,6 +244,25 @@ class Strings(val isArabic: Boolean) {
     val attachmentsLocalNote = t("المرفقات تبقى على الجهاز وتنتقل بين الأجهزة عبر ملفات النسخ الاحتياطي بصيغة notea.", "Attachments stay on the device and move between devices via .notea backups.")
     val about = t("حول", "About")
     val version = t("الإصدار", "Version")
+    val aboutNotea = t("حول Notea", "About Notea")
+    // Developer identity — shown in About and as the signature line under Settings.
+    val developerName = t("حسين الطويل", "Hussein Taweel")
+    val designedBy = t("تصميم وتطوير", "Designed & developed by")
+    val signature = t("صُنع بعناية ♥ بواسطة حسين الطويل", "Crafted with ♥ by Hussein Taweel")
+    val aboutDescription = t(
+        "تطبيق ملاحظات عربي الهوية: سريع، أنيق، يعمل دون إنترنت، ويحمي ملاحظاتك المقفلة بالتشفير. بياناتك ملكك — تصدّرها وتستعيدها متى شئت.",
+        "An Arabic-first notes app: fast, elegant, offline-first, with real encryption for locked notes. Your data is yours — export and restore it any time."
+    )
+    val sourceCode = t("الشيفرة المصدرية", "Source code")
+    val credits = t("شكر وتقدير", "Credits")
+    val fontCredit = t("الخط", "Font")
+    val libsCredit = t("المكتبات مفتوحة المصدر", "Open-source libraries")
+    val githubAccount = t("حساب GitHub", "GitHub account")
+    val debugBuild = t("نسخة تجريبية", "debug build")
+    fun versionLabel(raw: String): String {
+        val clean = raw.removeSuffix("-debug")
+        return if (raw.endsWith("-debug")) "${version} $clean • $debugBuild" else "$version $clean"
+    }
     val back = t("رجوع", "Back")
     val cancel = t("إلغاء", "Cancel")
     val ok = t("حسناً", "OK")

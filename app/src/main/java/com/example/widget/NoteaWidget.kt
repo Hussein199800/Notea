@@ -48,7 +48,7 @@ private data class WidgetNote(val id: String, val title: String, val preview: St
 class NoteaWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val c = (context.applicationContext as NoteaApp).container
-        val uid = c.currentUid()
+        val uid = c.activeUid()
         val arabic = c.isArabic()
         val notes = if (uid == null) emptyList() else c.db.noteDao().getAllWithDetails(uid)
             .filter { it.note.trashedAt == null && !it.note.isArchived }

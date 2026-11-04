@@ -34,6 +34,7 @@ abstract class NoteaDatabase : RoomDatabase() {
     abstract fun revisionDao(): RevisionDao
     abstract fun templateDao(): TemplateDao
     abstract fun searchDao(): SearchDao
+    abstract fun ownershipDao(): OwnershipDao
 
     companion object {
         const val VERSION = 2

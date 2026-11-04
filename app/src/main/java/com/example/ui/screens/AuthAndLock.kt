@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -84,7 +85,7 @@ fun NoteaMark(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun AuthScreen(onToggleLanguage: () -> Unit) {
+fun AuthScreen(onToggleLanguage: () -> Unit, onUseWithoutAccount: () -> Unit) {
     val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -122,7 +123,7 @@ fun AuthScreen(onToggleLanguage: () -> Unit) {
                 },
                 enabled = !busy,
                 colors = ButtonDefaults.buttonColors(containerColor = NoteaPalette.Ivory, contentColor = NoteaPalette.Emerald900),
-                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).height(56.dp)
+                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).heightIn(min = 56.dp)
             ) {
                 if (busy) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp); Spacer(Modifier.width(12.dp)); Text(s.signingIn) }
                 else Text(s.signInGoogle, style = MaterialTheme.typography.titleMedium)
@@ -131,6 +132,15 @@ fun AuthScreen(onToggleLanguage: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(it, color = NoteaPalette.GoldSoft, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             }
+            Spacer(Modifier.height(12.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = onUseWithoutAccount, enabled = !busy,
+                border = androidx.compose.foundation.BorderStroke(1.dp, NoteaPalette.Ivory.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).heightIn(min = 56.dp)
+            ) { Text(s.useWithoutAccount, color = NoteaPalette.Ivory, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center) }
+            Spacer(Modifier.height(8.dp))
+            Text(s.withoutAccountNote, color = NoteaPalette.Ivory.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 380.dp))
             Spacer(Modifier.height(20.dp))
             Text(s.signInNote, color = NoteaPalette.Ivory.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
                 modifier = Modifier.widthIn(max = 380.dp))

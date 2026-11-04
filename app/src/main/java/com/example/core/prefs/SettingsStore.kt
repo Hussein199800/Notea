@@ -63,6 +63,10 @@ class SettingsStore(context: Context) {
         prefs.edit().putBoolean("app_lock_$uid", enabled).putString("app_pin_$uid", hash).apply()
     }
 
+    /** User chose to use Notea without an account (data stays on this device). */
+    fun localMode(): Boolean = prefs.getBoolean("local_mode", false)
+    fun setLocalMode(on: Boolean) = prefs.edit().putBoolean("local_mode", on).apply()
+
     fun legacyUpgradeDone(): Boolean = prefs.getBoolean("legacy_upgrade_v2", false)
     fun setLegacyUpgradeDone() = prefs.edit().putBoolean("legacy_upgrade_v2", true).apply()
 }

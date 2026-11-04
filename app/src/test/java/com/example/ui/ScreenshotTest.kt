@@ -114,5 +114,7 @@ class ScreenshotTest {
     @Test fun home_ar_light() { rule.setContent { Frame(true, false) { HomeMock(true) } }; rule.waitForIdle(); save("home_ar_light") }
     @Test fun home_ar_dark() { rule.setContent { Frame(true, true) { HomeMock(true) } }; rule.waitForIdle(); save("home_ar_dark") }
     @Test fun home_en_light() { rule.setContent { Frame(false, false) { HomeMock(false) } }; rule.waitForIdle(); save("home_en_light") }
-    @Test fun auth_ar() { rule.setContent { Frame(true, false) { AuthScreen {} } }; rule.waitForIdle(); save("auth_ar") }
+    @Test fun about_ar() { rule.setContent { Frame(true, false) { com.example.ui.screens.AboutScreen {} } }; rule.waitForIdle(); save("about_ar") }
+    @Test fun about_en_dark() { rule.setContent { Frame(false, true) { com.example.ui.screens.AboutScreen {} } }; rule.waitForIdle(); save("about_en_dark") }
+    @Test fun auth_ar() { rule.setContent { Frame(true, false) { AuthScreen({}, {}) } }; rule.waitForIdle(); save("auth_ar") }
 }

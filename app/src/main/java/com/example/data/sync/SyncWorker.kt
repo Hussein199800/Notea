@@ -19,7 +19,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val uid = inputData.getString(KEY_UID) ?: return Result.failure()
         val container = (applicationContext as NoteaApp).container
         // Never upload another account's queue under the wrong session.
-        if (container.currentUid() != uid) return Result.success()
+        if (container.currentUid() != uid || !container.syncAvailable(uid)) return Result.success()
         return if (container.syncEngine.pushAll(uid)) Result.success()
         else if (runAttemptCount < 12) Result.retry() else Result.failure()
     }

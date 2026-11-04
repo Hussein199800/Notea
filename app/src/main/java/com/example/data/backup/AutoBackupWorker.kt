@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val c = (applicationContext as NoteaApp).container
-        val uid = c.currentUid() ?: return Result.success()
+        val uid = c.activeUid() ?: return Result.success()
         if (c.db.noteDao().getAllWithDetails(uid).isEmpty()) return Result.success()
         return try {
             c.backupManager.createSnapshot(uid); Result.success()

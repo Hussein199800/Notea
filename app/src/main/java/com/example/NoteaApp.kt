@@ -38,6 +38,8 @@ class NoteaApp : Application() {
 }
 
 /** Manual dependency container (no DI framework needed for this app size). */
+const val LOCAL_UID = "local-device"
+
 class AppContainer(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val settings = SettingsStore(app)
@@ -48,7 +50,7 @@ class AppContainer(val app: Application) {
 
     val repository: NoteRepository = NoteRepository(db, keyVault, attachmentStore, object : ChangeListener {
         override fun onNotesChanged(uid: String) {
-            SyncWorker.enqueue(app, uid)
+            if (syncAvailable(uid)) SyncWorker.enqueue(app, uid)
             NoteaWidgetUpdater.requestUpdate(app)
         }
         override fun onReminderChanged(reminder: ReminderEntity, noteTitle: String, locked: Boolean) =
@@ -61,7 +63,18 @@ class AppContainer(val app: Application) {
     val importManager by lazy { ImportManager(app, repository) }
     val backupManager by lazy { BackupManager(app, db, repository, keyVault) }
 
-    fun currentUid(): String? = runCatching { Firebase.auth.currentUser?.uid }.getOrNull()
+    /** True when this build has a Firebase configuration (app/google-services.json). */
+    val firebaseAvailable: Boolean by lazy { runCatching { com.google.firebase.FirebaseApp.getApps(app).isNotEmpty() }.getOrDefault(false) }
+
+    /** Signed-in Firebase account, if any. */
+    fun currentUid(): String? = if (!firebaseAvailable) null else runCatching { Firebase.auth.currentUser?.uid }.getOrNull()
+
+    /** The account whose notes are shown: the signed-in one, or the on-device local account. */
+    fun activeUid(): String? = currentUid() ?: if (!firebaseAvailable || settings.localMode()) LOCAL_UID else null
+
+    fun syncAvailable(uid: String) = firebaseAvailable && uid != LOCAL_UID
+
+    val accountLinker by lazy { com.example.data.repository.AccountLinker(this) }
 
     fun isArabic(): Boolean = when (settings.state.value.language) {
         LanguagePreference.ARABIC -> true

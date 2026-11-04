@@ -13,3 +13,9 @@
 - Room is the source of truth; migrations must be non-destructive (never `fallbackToDestructiveMigration`) and covered by `MigrationTest`.
 - Never store or upload plaintext of locked notes; encryption failures abort the write.
 - Any Firestore field change updates `firestore.rules`, `firestore.test.js` and `security_spec.md` together.
+
+## Identity & build
+- Independent app: `applicationId = com.notea.app` (debug builds use `.debug` suffix). No AI Studio tooling.
+- Developer identity shown in About / Settings signature: حسين الطويل — Hussein Taweel (GitHub Hussein199800). Keep the Seal-style About page.
+- Release signing comes only from `keystore.properties` (gitignored) or `NOTEA_KEYSTORE_PATH` / `NOTEA_KEYSTORE_PASSWORD` / `NOTEA_KEY_ALIAS` / `NOTEA_KEY_PASSWORD`. Never commit `*.jks` or passwords.
+- Firebase is optional: without `app/google-services.json` the app runs in on-device mode (`LOCAL_UID`). With it, sign-in + sync appear and `AccountLinker` moves on-device notes into the account.

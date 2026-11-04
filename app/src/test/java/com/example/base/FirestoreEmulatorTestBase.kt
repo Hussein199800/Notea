@@ -34,13 +34,13 @@ abstract class FirestoreEmulatorTestBase {
     open fun setUpFirebase() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
-        databaseId = if (resId != 0) context.getString(resId) else "ai-studio-android-vaultnot-b7f58c41-a91b-4915-8d86-6cc2c1f7beb5"
+        databaseId = if (resId != 0) context.getString(resId) else "(default)"
 
         val app = if (FirebaseApp.getApps(context).isEmpty()) {
             val newApp = FirebaseApp.initializeApp(
                 context,
                 FirebaseOptions.Builder()
-                    .setApplicationId("com.aistudio.vaultnotes.qrxmva")
+                    .setApplicationId("1:000000000000:android:0000000000000000")
                     .setProjectId(PROJECT_ID)
                     .setApiKey("fake-api-key-for-emulator")
                     .build()

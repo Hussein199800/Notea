@@ -237,3 +237,37 @@ interface SearchDao {
     @Query("SELECT COUNT(*) FROM notes_fts")
     suspend fun count(): Int
 }
+
+/** Re-owns rows when on-device (no account) data is linked to a signed-in account. */
+@Dao
+interface OwnershipDao {
+    @Query("UPDATE notes SET userId = :to, syncState = 1, baseRemoteUpdatedAt = 0 WHERE userId = :from")
+    suspend fun moveNotes(from: String, to: String): Int
+
+    @Query("UPDATE folders SET userId = :to, syncState = 1 WHERE userId = :from")
+    suspend fun moveFolders(from: String, to: String)
+
+    @Query("UPDATE attachments SET userId = :to WHERE userId = :from")
+    suspend fun moveAttachments(from: String, to: String)
+
+    @Query("UPDATE reminders SET userId = :to WHERE userId = :from")
+    suspend fun moveReminders(from: String, to: String)
+
+    @Query("UPDATE templates SET userId = :to WHERE userId = :from")
+    suspend fun moveTemplates(from: String, to: String)
+
+    @Query("UPDATE notes_fts SET userId = :to WHERE userId = :from")
+    suspend fun moveSearchIndex(from: String, to: String)
+
+    @Query("UPDATE tags SET userId = :to WHERE id = :tagId")
+    suspend fun moveTag(tagId: String, to: String)
+
+    @Query("UPDATE OR IGNORE note_tags SET tagId = :to WHERE tagId = :from")
+    suspend fun repointTag(from: String, to: String)
+
+    @Query("DELETE FROM note_tags WHERE tagId = :tagId")
+    suspend fun dropTagRefs(tagId: String)
+
+    @Query("SELECT COUNT(*) FROM notes WHERE userId = :uid")
+    suspend fun countNotes(uid: String): Int
+}

@@ -123,7 +123,7 @@ fun PageScaffold(title: String, onBack: () -> Unit, content: LazyListScope.() ->
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> Unit) {
+fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> Unit, onSignIn: (() -> Unit)?) {
     val s = LocalStrings.current
     val prefs by session.prefs.collectAsState()
     val vault by session.vaultState.collectAsState()
@@ -191,21 +191,29 @@ fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> U
             PreferenceGroup {
                 PreferenceRow(Icons.Rounded.Download, s.importCenter, s.importCenterDesc, onClick = { session.navigate(Screen.ImportCenter) })
                 PreferenceRow(Icons.Rounded.Backup, s.backupRestore, s.backupRestoreDesc, onClick = { session.navigate(Screen.Backup) })
-                PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (pending > 0) s.syncPending(pending) else s.syncUpToDate) {
+                if (session.online) PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (pending > 0) s.syncPending(pending) else s.syncUpToDate) {
                     TextButton(onClick = { session.syncNow() }) { Text(s.syncNow) }
-                }
-                ExpandableText(s.syncInfo + " " + s.attachmentsLocalNote, collapsedLines = 2, style = MaterialTheme.typography.bodySmall,
+                } else PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (onSignIn != null) s.localSyncInfo else s.syncNotConfigured)
+                if (session.online) ExpandableText(s.syncInfo + " " + s.attachmentsLocalNote, collapsedLines = 2, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 72.dp, end = 18.dp, bottom = 14.dp))
             }
         }
         item {
             SectionLabel(s.account)
             PreferenceGroup {
-                PreferenceRow(Icons.Rounded.PhoneAndroid, email ?: "", null)
-                PreferenceRow(Icons.AutoMirrored.Rounded.Logout, s.signOut, null, onClick = { confirmSignOut = true })
+                if (session.isLocalAccount) {
+                    PreferenceRow(Icons.Rounded.PhoneAndroid, s.localAccount, null)
+                    if (onSignIn != null) PreferenceRow(Icons.Rounded.CloudSync, s.signInToSync, s.localSyncInfo, onClick = onSignIn)
+                } else {
+                    PreferenceRow(Icons.Rounded.PhoneAndroid, email ?: "", null)
+                    PreferenceRow(Icons.AutoMirrored.Rounded.Logout, s.signOut, null, onClick = { confirmSignOut = true })
+                }
             }
             SectionLabel(s.about)
-            PreferenceGroup { PreferenceRow(Icons.Rounded.Info, "Notea", s.version + " " + com.example.BuildConfig.VERSION_NAME) }
+            PreferenceGroup {
+                PreferenceRow(Icons.Rounded.Info, s.aboutNotea, s.versionLabel(com.example.BuildConfig.VERSION_NAME), onClick = { session.navigate(Screen.About) })
+            }
+            DeveloperSignature(Modifier.padding(top = 28.dp, bottom = 8.dp))
         }
     }
 

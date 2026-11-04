@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -83,19 +84,28 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
         LanguagePreference.SYSTEM -> Locale.getDefault().language == "ar"
     }
     val strings = remember(arabic) { Strings(arabic) }
-    val auth = remember { runCatching { Firebase.auth }.getOrNull() }
+    val auth = remember { if (container.firebaseAvailable) runCatching { Firebase.auth }.getOrNull() else null }
+    var localMode by remember { mutableStateOf(container.settings.localMode()) }
+    fun setLocal(on: Boolean) { container.settings.setLocalMode(on); localMode = on }
     val user by (auth?.authStateFlow() ?: flowOf(null)).collectAsStateWithLifecycle(initialValue = auth?.currentUser)
 
     NoteaTheme(dark) {
         CompositionLocalProvider(LocalStrings provides strings, LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 val u = user
-                if (u == null) {
-                    AuthScreen(onToggleLanguage = {
-                        container.settings.update { it.copy(language = if (arabic) LanguagePreference.ENGLISH else LanguagePreference.ARABIC) }
-                    })
-                } else {
-                    SessionContent(container, u.uid, u.email, incoming, consumeIncoming)
+                val signIn: (() -> Unit)? = if (auth != null) ({ setLocal(false) }) else null
+                when {
+                    u != null -> LinkLocalData(container, u.uid) {
+                        SessionContent(container, u.uid, u.email, incoming, consumeIncoming, null)
+                    }
+                    // No Firebase in this build, or the user chose "use without an account".
+                    auth == null || localMode -> SessionContent(container, com.example.LOCAL_UID, null, incoming, consumeIncoming, signIn)
+                    else -> AuthScreen(
+                        onToggleLanguage = {
+                            container.settings.update { it.copy(language = if (arabic) LanguagePreference.ENGLISH else LanguagePreference.ARABIC) }
+                        },
+                        onUseWithoutAccount = { setLocal(true) }
+                    )
                 }
             }
         }
@@ -103,7 +113,7 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
 }
 
 @Composable
-private fun SessionContent(container: AppContainer, uid: String, email: String?, incoming: Flow<IncomingIntent>, consumeIncoming: () -> Unit) {
+private fun SessionContent(container: AppContainer, uid: String, email: String?, incoming: Flow<IncomingIntent>, consumeIncoming: () -> Unit, onSignIn: (() -> Unit)?) {
     val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -188,12 +198,13 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                 when (screen) {
                     Screen.Home -> HomeScreen(session, home, null, openNote)
                     is Screen.Editor -> EditorHost(container, session, uid, screen, folders)
-                    Screen.Settings -> SettingsScreen(session, email) {
+                    Screen.Settings -> SettingsScreen(session, email, onSignOut = {
                         session.signOut { com.example.auth.signOut(context, CredentialManager.create(context), {}, scope) }
-                    }
+                    }, onSignIn = onSignIn)
                     Screen.ImportCenter -> ImportCenterScreen(session, data)
                     Screen.ImportPreview -> ImportPreviewScreen(session, data)
                     Screen.Backup -> BackupScreen(session, data)
+                    Screen.About -> com.example.ui.screens.AboutScreen { session.back() }
                 }
             }
         }
@@ -210,4 +221,59 @@ private fun EditorHost(container: AppContainer, session: SessionViewModel, uid: 
         initializer { EditorViewModel(container, uid, screen.noteId) }
     })
     EditorScreen(session, vm, folders) { session.back() }
+}
+
+/**
+ * After signing in, moves notes created without an account into that account (once). Nothing is
+ * deleted: if linking can't finish (offline, wrong vault passphrase) the user can retry later.
+ */
+@Composable
+private fun LinkLocalData(container: AppContainer, uid: String, content: @Composable () -> Unit) {
+    val s = LocalStrings.current
+    val scope = rememberCoroutineScope()
+    var state by remember(uid) { mutableStateOf<com.example.data.repository.AccountLinker.Result?>(null) }
+    var skipped by remember(uid) { mutableStateOf(false) }
+    var working by remember(uid) { mutableStateOf(true) }
+    var doneMessage by remember(uid) { mutableStateOf<String?>(null) }
+    fun run(pass: CharArray? = null) = scope.launch {
+        working = true
+        val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { container.accountLinker.link(uid, pass) }.getOrElse { com.example.data.repository.AccountLinker.Result.NeedsInternet }
+        }
+        pass?.fill(' ')
+        state = r; working = false
+        if (r is com.example.data.repository.AccountLinker.Result.Done) doneMessage = s.linkDone(r.notes)
+    }
+    androidx.compose.runtime.LaunchedEffect(uid) { run() }
+    val r = state
+    when {
+        skipped || r is com.example.data.repository.AccountLinker.Result.Done || r == com.example.data.repository.AccountLinker.Result.NothingToLink -> {
+            content()
+            doneMessage?.let { msg -> androidx.compose.runtime.LaunchedEffect(msg) { kotlinx.coroutines.delay(300); doneMessage = null } ; LinkToast(msg) }
+        }
+        working -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                androidx.compose.material3.CircularProgressIndicator()
+                Text(s.linkingTitle, Modifier.padding(24.dp), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        r == com.example.data.repository.AccountLinker.Result.NeedsAccountPassphrase || r == com.example.data.repository.AccountLinker.Result.WrongPassphrase ->
+            com.example.ui.components.PassphraseDialog(
+                create = false, title = s.vaultTitle,
+                body = s.linkNeedsPassphrase + if (r == com.example.data.repository.AccountLinker.Result.WrongPassphrase) "\n" + s.wrongPassphrase else "",
+                submit = { p -> run(p); true }, onSuccess = {}, onDismiss = { skipped = true }
+            )
+        else -> androidx.compose.material3.AlertDialog(
+            onDismissRequest = { skipped = true },
+            text = { com.example.ui.components.ExpandableText(s.linkNeedsInternet) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { run() }) { Text(s.retry) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { skipped = true }) { Text(s.later) } }
+        )
+    }
+}
+
+@Composable
+private fun LinkToast(msg: String) {
+    val ctx = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(msg) { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
 }

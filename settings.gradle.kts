@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Arabic Notes"
+rootProject.name = "Notea"
 
 include(":app")

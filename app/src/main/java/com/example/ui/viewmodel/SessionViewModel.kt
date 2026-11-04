@@ -26,6 +26,7 @@ sealed interface Screen {
     data object ImportCenter : Screen
     data object ImportPreview : Screen
     data object Backup : Screen
+    data object About : Screen
 }
 
 /** Shared incoming content from Android share sheet / widgets / notifications. */
@@ -39,6 +40,9 @@ sealed interface IncomingIntent {
 
 /** Per-account session: navigation, app lock, vault state, sync status and messages. */
 class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel() {
+    /** False for the on-device account or builds without Firebase: everything stays local. */
+    val online: Boolean = container.syncAvailable(uid)
+    val isLocalAccount: Boolean = uid == com.example.LOCAL_UID
     private val settings = container.settings
     val prefs: StateFlow<AppPrefs> = settings.state
 
@@ -72,7 +76,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
             container.repository.purgeExpiredTrash(uid)
             refreshVault()
         }
-        viewModelScope.launch(Dispatchers.IO) {
+        if (online) viewModelScope.launch(Dispatchers.IO) {
             // Online-only extras; everything else works without network.
             container.syncEngine.fetchVaultEnvelope(uid)
             refreshVault()
@@ -89,11 +93,11 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
                 }
             }
         }
-        SyncWorker.enqueue(container.app, uid, 0)
+        if (online) SyncWorker.enqueue(container.app, uid, 0)
     }
 
-    fun startRealtimeSync() = runCatching { container.syncEngine.startListening(uid, container.scope) }
-    fun stopRealtimeSync() = runCatching { container.syncEngine.stopListening() }
+    fun startRealtimeSync() = if (!online) Unit else runCatching { container.syncEngine.startListening(uid, container.scope) }
+    fun stopRealtimeSync() = if (!online) Unit else runCatching { container.syncEngine.stopListening() }
 
     fun message(m: String) { _messages.tryEmit(m) }
 
@@ -132,6 +136,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
     }
 
     private fun pushSettings() = viewModelScope.launch(Dispatchers.IO) {
+        if (!online) return@launch
         container.syncEngine.pushSettings(uid, settings.appLockEnabled(uid), settings.appLockHash(uid), if (container.isArabic()) "ar" else "en")
     }
 
@@ -190,7 +195,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
      */
     suspend fun setUpVault(passphrase: CharArray): Boolean = withContext(Dispatchers.IO) {
         try {
-            when (val remote = container.syncEngine.checkRemoteVault(uid)) {
+            if (online) when (val remote = container.syncEngine.checkRemoteVault(uid)) {
                 is com.example.data.sync.SyncEngine.RemoteVault.Exists -> {
                     container.keyVault.rememberEnvelope(uid, remote.envelope)
                     refreshVault()
@@ -201,7 +206,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
                 com.example.data.sync.SyncEngine.RemoteVault.Missing -> Unit
             }
             val env = container.keyVault.setUp(uid, passphrase)
-            if (!container.syncEngine.uploadVaultEnvelope(uid, env)) message(vaultNeedsOnlineMsg())
+            if (online && !container.syncEngine.uploadVaultEnvelope(uid, env)) message(vaultNeedsOnlineMsg())
             refreshVault()
             upgradeOldLockedNotes(silent = true)
             true
@@ -226,7 +231,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
     suspend fun changeVaultPassphrase(passphrase: CharArray): Boolean = withContext(Dispatchers.Default) {
         try {
             val env = container.keyVault.changePassphrase(uid, passphrase)
-            container.syncEngine.uploadVaultEnvelope(uid, env)
+            if (online) container.syncEngine.uploadVaultEnvelope(uid, env) else true
         } catch (_: Exception) {
             false
         } finally {
@@ -242,7 +247,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
 
     private fun vaultNeedsOnlineMsg() = if (container.isArabic()) "يلزم اتصال بالإنترنت لإنشاء الخزنة أول مرة" else "An internet connection is needed to create the vault the first time"
 
-    fun syncNow() = SyncWorker.enqueue(container.app, uid, 0)
+    fun syncNow() { if (online) SyncWorker.enqueue(container.app, uid, 0) }
 
     fun signOut(onDone: () -> Unit) {
         stopRealtimeSync()

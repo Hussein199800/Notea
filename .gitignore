@@ -17,3 +17,10 @@ local.properties
 .env
 debug.keystore
 *-debug.log
+
+# Signing secrets — never commit
+*.jks
+*.keystore
+keystore.properties
+# Per-developer Firebase config (optional)
+app/google-services.json
