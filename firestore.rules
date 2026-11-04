@@ -1,30 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Pillar 1: Global Default-Deny Safety Net
+    // Global default-deny safety net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    // Client-provided timestamps may be slightly ahead of the server clock.
+    function notFuture(ts) { return ts is timestamp && ts <= request.time + duration.value(1, 'd'); }
+    function optString(data, key, max) { return !(key in data) || (data[key] is string && data[key].size() <= max); }
+    function optInt(data, key) { return !(key in data) || data[key] is int; }
+    function optBool(data, key) { return !(key in data) || data[key] is bool; }
+    function optList(data, key, max) { return !(key in data) || (data[key] is list && data[key].size() <= max); }
 
     function isValidUserSettings(data, userId) {
       return data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
@@ -34,33 +28,70 @@ service cloud.firestore {
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
+    // v1 fields are required (older app versions still read/write them); v2 fields are optional.
+    function noteKeys() {
+      return ['userId', 'title', 'content', 'category', 'colorIndex', 'isPinned', 'isLocked', 'notePinHash',
+              'lockHint', 'isArchived', 'createdAt', 'updatedAt',
+              'schemaVersion', 'isFavorite', 'trashedAt', 'folderId', 'tags', 'checklist', 'reminderAt',
+              'clientUpdatedAt', 'deviceId'];
+    }
+    function requiredNoteKeys() {
+      return ['userId', 'title', 'content', 'category', 'colorIndex', 'isPinned', 'isLocked', 'notePinHash',
+              'lockHint', 'isArchived', 'createdAt', 'updatedAt'];
+    }
+
     function isValidNote(data, userId) {
       return data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
              data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
-             data.content is string && data.content.size() <= 20000 &&
+             // Long notes and encrypted payloads (base64) stay well below the 1 MiB document limit.
+             data.content is string && data.content.size() <= 700000 &&
              data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
-             data.colorIndex is int && data.colorIndex >= 0 && data.colorIndex <= 5 &&
+             data.colorIndex is int && data.colorIndex >= 0 && data.colorIndex <= 7 &&
              data.isPinned is bool &&
              data.isLocked is bool &&
              data.notePinHash is string && data.notePinHash.size() <= 128 &&
              data.lockHint is string && data.lockHint.size() <= 100 &&
              data.isArchived is bool &&
-             data.createdAt is timestamp && data.createdAt <= request.time &&
+             notFuture(data.createdAt) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             optInt(data, 'schemaVersion') && optBool(data, 'isFavorite') && optInt(data, 'trashedAt') &&
+             optString(data, 'folderId', 128) && optList(data, 'tags', 50) && optList(data, 'checklist', 500) &&
+             optInt(data, 'reminderAt') && optInt(data, 'clientUpdatedAt') && optString(data, 'deviceId', 64) &&
+             // Locked notes must never carry plaintext checklist items.
+             (!data.isLocked || !('checklist' in data) || data.checklist.size() == 0);
+    }
+
+    function isValidFolder(data, userId) {
+      return data.userId == userId && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.colorIndex is int && data.colorIndex >= 0 && data.colorIndex <= 7 &&
+             data.position is int &&
+             notFuture(data.createdAt) &&
+             data.clientUpdatedAt is int &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Vault envelope: master key wrapped by a key derived from the user's passphrase (ciphertext only).
+    function isValidVault(data, userId) {
+      return data.userId == userId && data.userId == request.auth.uid &&
+             data.v is int && data.kdf == 'pbkdf2-hmac-sha256' &&
+             data.iter is int && data.iter >= 100000 && data.iter <= 5000000 &&
+             data.salt is string && data.salt.size() <= 64 &&
+             data.wrapped is string && data.wrapped.size() <= 256 &&
+             data.keyId is string && data.keyId.size() <= 64 &&
+             data.createdAtMillis is int;
     }
 
     match /users/{userId} {
       allow get: if isOwner(userId) && isValidId(userId);
       allow list: if false;
 
-      allow create: if isOwner(userId) &&
-                       isValidId(userId) &&
+      allow create: if isOwner(userId) && isValidId(userId) &&
                        incoming().keys().hasAll(['userId', 'appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']) &&
                        incoming().keys().hasOnly(['userId', 'appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']) &&
                        isValidUserSettings(incoming(), userId);
 
-      allow update: if isOwner(userId) &&
-                       isValidId(userId) &&
+      allow update: if isOwner(userId) && isValidId(userId) &&
                        isValidUserSettings(incoming(), userId) &&
                        incoming().userId == existing().userId &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['appLockEnabled', 'appPinHash', 'languageCode', 'updatedAt']);
@@ -71,34 +102,43 @@ service cloud.firestore {
         allow get: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && existing().userId == request.auth.uid;
         allow list: if isOwner(userId) && existing().userId == request.auth.uid;
 
-        allow create: if isOwner(userId) &&
-                         isValidId(userId) &&
-                         isValidId(noteId) &&
-                         incoming().keys().hasAll([
-                           'userId', 'title', 'content', 'category', 'colorIndex',
-                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
-                           'isArchived', 'createdAt', 'updatedAt'
-                         ]) &&
-                         incoming().keys().hasOnly([
-                           'userId', 'title', 'content', 'category', 'colorIndex',
-                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
-                           'isArchived', 'createdAt', 'updatedAt'
-                         ]) &&
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(noteId) &&
+                         incoming().keys().hasAll(requiredNoteKeys()) &&
+                         incoming().keys().hasOnly(noteKeys()) &&
                          isValidNote(incoming(), userId);
 
-        allow update: if isOwner(userId) &&
-                         isValidId(userId) &&
-                         isValidId(noteId) &&
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(noteId) &&
+                         incoming().keys().hasOnly(noteKeys()) &&
                          isValidNote(incoming(), userId) &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly([
-                           'title', 'content', 'category', 'colorIndex',
-                           'isPinned', 'isLocked', 'notePinHash', 'lockHint',
-                           'isArchived', 'updatedAt'
-                         ]);
+                         incoming().createdAt == existing().createdAt;
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && existing().userId == request.auth.uid;
+      }
+
+      match /folders/{folderId} {
+        allow get, list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow create: if isOwner(userId) && isValidId(folderId) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'colorIndex', 'position', 'createdAt', 'clientUpdatedAt', 'updatedAt']) &&
+                         isValidFolder(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(folderId) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'colorIndex', 'position', 'createdAt', 'clientUpdatedAt', 'updatedAt']) &&
+                         isValidFolder(incoming(), userId) &&
+                         incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(userId) && existing().userId == request.auth.uid;
+      }
+
+      match /vault/{docId} {
+        allow get: if isOwner(userId) && docId == 'key';
+        allow list: if false;
+        allow create: if isOwner(userId) && docId == 'key' &&
+                         incoming().keys().hasOnly(['userId', 'v', 'kdf', 'iter', 'salt', 'wrapped', 'keyId', 'createdAtMillis']) &&
+                         isValidVault(incoming(), userId);
+        // Passphrase change re-wraps the SAME master key; replacing the key would orphan encrypted notes.
+        allow update: if isOwner(userId) && docId == 'key' &&
+                         incoming().keys().hasOnly(['userId', 'v', 'kdf', 'iter', 'salt', 'wrapped', 'keyId', 'createdAtMillis']) &&
+                         isValidVault(incoming(), userId) && incoming().keyId == existing().keyId;
+        allow delete: if false;
       }
     }
   }

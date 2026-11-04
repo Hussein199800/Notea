@@ -2,60 +2,39 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Deep Forest Emerald & Warm Brass / Parchment Palette
-val VaultEmeraldPrimary = Color(0xFF144536)
-val VaultEmeraldOnPrimary = Color(0xFFFFFFFF)
-val VaultEmeraldContainer = Color(0xFFD2EFE3)
-val VaultOnEmeraldContainer = Color(0xFF07231A)
+// Notea identity: deep emerald, warm ivory, muted gold, charcoal night.
+object NoteaPalette {
+    val Emerald900 = Color(0xFF07382A)
+    val Emerald700 = Color(0xFF0E5A43)
+    val Emerald500 = Color(0xFF2E7D62)
+    val Emerald200 = Color(0xFF9ED8BE)
+    val Emerald100 = Color(0xFFCFE9DC)
 
-val VaultGoldSecondary = Color(0xFF9C721C)
-val VaultOnGoldSecondary = Color(0xFFFFFFFF)
-val VaultGoldContainer = Color(0xFFFFE09E)
-val VaultOnGoldContainer = Color(0xFF2E1F00)
+    val Ivory = Color(0xFFFAF6EC)
+    val IvorySurface = Color(0xFFFFFCF5)
+    val IvoryDeep = Color(0xFFF2ECDD)
+    val Parchment = Color(0xFFEBE3D1)
 
-val VaultTerracottaTertiary = Color(0xFF8B4A3A)
-val VaultOnTerracottaTertiary = Color(0xFFFFFFFF)
-val VaultTerracottaContainer = Color(0xFFFFDAD2)
-val VaultOnTerracottaContainer = Color(0xFF360E05)
+    val Gold = Color(0xFFA88A4E)
+    val GoldSoft = Color(0xFFF1E4C3)
+    val GoldNight = Color(0xFFD9BE84)
 
-val VaultLightBackground = Color(0xFFFBF8F3)
-val VaultLightSurface = Color(0xFFFFFFFF)
-val VaultLightSurfaceVariant = Color(0xFFF1ECE1)
-val VaultLightOnSurface = Color(0xFF181D1A)
-val VaultLightOnSurfaceVariant = Color(0xFF434945)
+    val Charcoal = Color(0xFF121414)
+    val CharcoalSurface = Color(0xFF181B1B)
+    val CharcoalHigh = Color(0xFF222727)
+    val CharcoalHighest = Color(0xFF2B3130)
 
-// Dark Theme Colors
-val VaultDarkPrimary = Color(0xFF89D6B9)
-val VaultDarkOnPrimary = Color(0xFF003829)
-val VaultDarkPrimaryContainer = Color(0xFF0F513E)
-val VaultDarkOnPrimaryContainer = Color(0xFFA5F2D5)
+    val Ink = Color(0xFF1D1B16)
+    val InkSoft = Color(0xFF4A473D)
+    val Danger = Color(0xFFB3261E)
+}
 
-val VaultDarkSecondary = Color(0xFFF4C95D)
-val VaultDarkOnSecondary = Color(0xFF432C00)
-val VaultDarkSecondaryContainer = Color(0xFF604100)
-val VaultDarkOnSecondaryContainer = Color(0xFFFFDF96)
-
-val VaultDarkBackground = Color(0xFF0D1512)
-val VaultDarkSurface = Color(0xFF15201C)
-val VaultDarkSurfaceVariant = Color(0xFF21302A)
-val VaultDarkOnSurface = Color(0xFFE2E6E2)
-val VaultDarkOnSurfaceVariant = Color(0xFFBFC9C3)
-
-// Note Card Accent Surfaces (Light & Dark variants)
-val NoteCardLightColors = listOf(
-    Color(0xFFFFFFFF), // 0: Crisp Ivory
-    Color(0xFFEAF6F0), // 1: Mint Sage
-    Color(0xFFFFF4DC), // 2: Warm Amber Parchment
-    Color(0xFFFBECE8), // 3: Soft Terracotta Blush
-    Color(0xFFEBF1FA), // 4: Serene Slate Blue
-    Color(0xFFF3ECF8)  // 5: Royal Lavender Mist
+/** Note colours: index 0 = default surface. Names are used for accessibility labels. */
+val NoteCardLight = listOf(
+    Color(0xFFFFFCF5), Color(0xFFE3F1E8), Color(0xFFF6EBCF), Color(0xFFF7E1DA),
+    Color(0xFFDFEAF3), Color(0xFFEAE3F2), Color(0xFFEFE2D2), Color(0xFFDDF0EE)
 )
-
-val NoteCardDarkColors = listOf(
-    Color(0xFF182420), // 0: Deep Vault Slate
-    Color(0xFF163027), // 1: Forest Emerald Tint
-    Color(0xFF2E2615), // 2: Antique Brass Tint
-    Color(0xFF301E1B), // 3: Warm Rosewood Tint
-    Color(0xFF192533), // 4: Midnight Indigo Tint
-    Color(0xFF271E30)  // 5: Deep Plum Tint
+val NoteCardDark = listOf(
+    Color(0xFF1C2020), Color(0xFF16302A), Color(0xFF332B17), Color(0xFF35211D),
+    Color(0xFF18283A), Color(0xFF282035), Color(0xFF30271E), Color(0xFF153130)
 )

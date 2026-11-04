@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Arabic Notes</string>
+    <string name="app_name">Notea</string>
     <string name="app_tagline">Offline &amp; cloud-synced Arabic &amp; English notes with encryption &amp; locking</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="new_note">New Note</string>
@@ -9,4 +9,5 @@
     <string name="switch_language">العربية / EN</string>
     <string name="settings_title">Settings &amp; Security</string>
     <string name="sign_out">Sign Out</string>
+    <string name="widget_description">Quick note and recent notes</string>
 </resources>

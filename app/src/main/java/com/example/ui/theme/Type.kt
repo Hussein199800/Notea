@@ -8,72 +8,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-val CairoFontFamily = FontFamily(
-    Font(R.font.cairo, FontWeight.Normal),
-    Font(R.font.cairo, FontWeight.Medium),
-    Font(R.font.cairo, FontWeight.Bold)
+/** IBM Plex Sans Arabic (OFL): modern Arabic + matching Latin in one family. */
+val NoteaFont = FontFamily(
+    Font(R.font.plex_arabic_regular, FontWeight.Normal),
+    Font(R.font.plex_arabic_medium, FontWeight.Medium),
+    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
+    Font(R.font.plex_arabic_bold, FontWeight.Bold)
 )
 
-val PlusJakartaFontFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans, FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans, FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans, FontWeight.Bold)
-)
+private fun style(size: Int, line: Int, weight: FontWeight, letter: Double = 0.0) =
+    TextStyle(fontFamily = NoteaFont, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp, letterSpacing = letter.sp)
 
-// Cairo supports both Arabic and Latin scripts gracefully
-val Typography = Typography(
-    displayLarge = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 36.sp,
-        lineHeight = 44.sp
-    ),
-    headlineLarge = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp
-    ),
-    headlineMedium = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        lineHeight = 30.sp
-    ),
-    titleLarge = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 19.sp,
-        lineHeight = 26.sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 24.sp
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 25.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 21.sp
-    ),
-    labelLarge = TextStyle(
-        fontFamily = CairoFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
-    ),
-    labelMedium = TextStyle(
-        fontFamily = PlusJakartaFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp
-    )
+val NoteaTypography = Typography(
+    displayLarge = style(44, 56, FontWeight.Bold),
+    displayMedium = style(36, 46, FontWeight.Bold),
+    displaySmall = style(30, 40, FontWeight.Bold),
+    headlineLarge = style(28, 38, FontWeight.Bold),
+    headlineMedium = style(24, 34, FontWeight.SemiBold),
+    headlineSmall = style(21, 30, FontWeight.SemiBold),
+    titleLarge = style(19, 28, FontWeight.SemiBold),
+    titleMedium = style(16, 24, FontWeight.SemiBold),
+    titleSmall = style(14, 21, FontWeight.Medium),
+    bodyLarge = style(16, 27, FontWeight.Normal),
+    bodyMedium = style(14, 22, FontWeight.Normal),
+    bodySmall = style(12.5.toInt(), 19, FontWeight.Normal),
+    labelLarge = style(14, 20, FontWeight.Medium),
+    labelMedium = style(12, 17, FontWeight.Medium),
+    labelSmall = style(11, 15, FontWeight.Medium)
 )
