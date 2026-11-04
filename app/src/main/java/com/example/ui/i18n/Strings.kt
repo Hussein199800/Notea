@@ -221,15 +221,15 @@ class Strings(val isArabic: Boolean) {
     val minutes = { m: Int -> t("بعد ${num(m)} د", "After $m min") }
     val dataSection = t("البيانات", "Data")
     val importCenter = t("مركز الاستيراد", "Import center")
-    val importCenterDesc = t("Samsung وXiaomi وHuawei وملفات أخرى", "Samsung, Xiaomi, Huawei and other files")
+    val importCenterDesc = t("Samsung و Xiaomi و Huawei وملفات أخرى", "Samsung, Xiaomi, Huawei and other files")
     val backupRestore = t("النسخ الاحتياطي والاستعادة", "Backup & restore")
-    val backupRestoreDesc = t("ملف ‎.notea‎ كامل مع المرفقات", "Complete .notea file with attachments")
+    val backupRestoreDesc = t("ملف ⁦.notea⁩ كامل مع المرفقات", "Complete .notea file with attachments")
     val sync = t("المزامنة", "Sync")
     val syncPending = { n: Int -> t("${num(n)} تغيير بانتظار الرفع", "$n changes waiting to upload") }
     val syncUpToDate = t("كل شيء متزامن", "Everything is synced")
     val syncNow = t("زامن الآن", "Sync now")
     val syncInfo = t("تُحفظ التعديلات على الجهاز فوراً وتُرفع عند توفر الإنترنت.", "Edits are saved on the device instantly and uploaded when online.")
-    val attachmentsLocalNote = t("المرفقات تبقى على الجهاز وتنتقل بين الأجهزة عبر النسخ الاحتياطي ‎.notea‎.", "Attachments stay on the device and move between devices via .notea backups.")
+    val attachmentsLocalNote = t("المرفقات تبقى على الجهاز وتنتقل بين الأجهزة عبر النسخ الاحتياطي ⁦.notea⁩.", "Attachments stay on the device and move between devices via .notea backups.")
     val about = t("حول", "About")
     val version = t("الإصدار", "Version")
     val back = t("رجوع", "Back")
@@ -299,7 +299,7 @@ class Strings(val isArabic: Boolean) {
 
     // Backup
     val exportBackup = t("تصدير نسخة كاملة", "Export full backup")
-    val exportBackupDesc = t("ملف ‎.notea‎ يضم الملاحظات والمجلدات والوسوم والمهام والتذكيرات والمرفقات والسجل.", "A .notea file with notes, folders, tags, checklists, reminders, attachments and history.")
+    val exportBackupDesc = t("ملف ⁦.notea⁩ يضم الملاحظات والمجلدات والوسوم والمهام والتذكيرات والمرفقات والسجل.", "A .notea file with notes, folders, tags, checklists, reminders, attachments and history.")
     val encryptBackup = t("تشفير بكلمة مرور", "Encrypt with a password")
     val backupPassword = t("كلمة مرور النسخة (٨ أحرف على الأقل)", "Backup password (at least 8 characters)")
     val backupPasswordInfo = t("بدون كلمة المرور لا يمكن فتح النسخة. الملاحظات المقفلة تبقى مشفّرة بالخزنة في كل الأحوال.", "Without the password the backup can't be opened. Locked notes stay vault-encrypted either way.")

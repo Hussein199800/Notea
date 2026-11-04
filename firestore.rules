@@ -99,7 +99,8 @@ service cloud.firestore {
       allow delete: if isOwner(userId) && isValidId(userId);
 
       match /notes/{noteId} {
-        allow get: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && existing().userId == request.auth.uid;
+        // resource == null: reading a not-yet-existing doc (pre-write conflict check) is allowed for the owner.
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && (resource == null || existing().userId == request.auth.uid);
         allow list: if isOwner(userId) && existing().userId == request.auth.uid;
 
         allow create: if isOwner(userId) && isValidId(userId) && isValidId(noteId) &&
@@ -117,7 +118,8 @@ service cloud.firestore {
       }
 
       match /folders/{folderId} {
-        allow get, list: if isOwner(userId) && existing().userId == request.auth.uid;
+        allow get: if isOwner(userId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
         allow create: if isOwner(userId) && isValidId(folderId) &&
                          incoming().keys().hasOnly(['userId', 'name', 'colorIndex', 'position', 'createdAt', 'clientUpdatedAt', 'updatedAt']) &&
                          isValidFolder(incoming(), userId);

@@ -65,7 +65,8 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  sourceSets { getByName("test").assets.directories.add("$projectDir/schemas") }
+  // Room schema JSONs for migration tests (Robolectric unit tests read debug assets).
+  sourceSets { getByName("debug").assets.directories.add("$projectDir/schemas") }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -156,7 +157,7 @@ dependencies {
 }
 
 tasks.withType<Test> {
-  failFast = true
+  failFast = false
   timeout.set(Duration.ofMinutes(2))
   testLogging {
     events("passed", "failed", "skipped")

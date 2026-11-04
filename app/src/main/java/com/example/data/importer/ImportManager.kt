@@ -238,7 +238,7 @@ class ImportManager(private val context: Context, private val repository: NoteRe
         val n = addAttachments(uid, newId, c)
         if (c.reminderAt != null && c.reminderAt > System.currentTimeMillis()) repository.setReminder(uid, newId, c.reminderAt)
         // Attachments bump updatedAt; restore the original modification date.
-        if (n > 0 && draft.updatedAt != null) repository.restoreTimestamps(newId, draft.createdAt, draft.updatedAt)
+        if (draft.updatedAt != null) repository.restoreTimestamps(newId, draft.createdAt, draft.updatedAt)
         return n
     }
 

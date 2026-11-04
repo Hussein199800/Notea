@@ -256,3 +256,11 @@ test("9. Vault envelope: owner only, key id cannot be swapped, cannot be deleted
   await assertFails(ref.set({ ...env, iter: 1000 })); // weak KDF rejected
   await assertFails(aliceDb.collection("users").doc(ALICE_UID).collection("vault").doc("other").set(env));
 });
+
+test("10. Owner may probe a not-yet-existing note (pre-write conflict check); others may not", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("notes").doc("not_yet").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("notes").doc("not_yet").get());
+  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("folders").doc("nf").get());
+});
