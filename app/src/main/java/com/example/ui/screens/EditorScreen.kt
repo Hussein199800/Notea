@@ -211,11 +211,12 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) cameraUri.value?.let { vm.addAttachmentFromUri(it, AttachmentKind.IMAGE) }
     }
+    var scanFallback by remember { mutableStateOf(false) }
     val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        if (r.resultCode == android.app.Activity.RESULT_OK) {
-            com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages
-                ?.forEach { vm.addAttachmentFromUri(it.imageUri, AttachmentKind.IMAGE) }
-        }
+        val pages = if (r.resultCode == android.app.Activity.RESULT_OK)
+            com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages.orEmpty() else emptyList()
+        if (pages.isEmpty()) scanFallback = true // cancelled, or Google's "Something went wrong" screen
+        pages.forEach { vm.addAttachmentFromUri(it.imageUri, AttachmentKind.IMAGE) }
     }
     fun launchCamera() {
         val f = java.io.File(context.cacheDir, "camera/scan_${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
@@ -230,11 +231,17 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
             .setGalleryImportAllowed(true).setPageLimit(20)
             .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
             .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL).build()
-        runCatching {
-            com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+        val client = runCatching { com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options) }.getOrNull()
+        if (client == null) { launchCamera(); return }
+        scope.launch {
+            // Only open Google's scanner when its module is really installed; otherwise go straight to the camera.
+            if (!com.example.ui.platform.GmsModules.ready(context, client)) {
+                session.message(s.scannerUsingCamera); launchCamera(); return@launch
+            }
+            client.getStartScanIntent(activity)
                 .addOnSuccessListener { scanLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
                 .addOnFailureListener { launchCamera() }
-        }.onFailure { launchCamera() }
+        }
     }
     LaunchedEffect(startScan, st.loading) { if (startScan && !st.loading) startScan() }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -443,6 +450,13 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                 vm.addLinkCard(u, p?.title.orEmpty(), p?.description.orEmpty())
             }
         })
+    if (scanFallback) AlertDialog(
+        onDismissRequest = { scanFallback = false },
+        title = { Text(s.scanIncompleteTitle) },
+        text = { com.example.ui.components.ExpandableText(s.scanIncompleteBody, collapsedLines = 6) },
+        confirmButton = { TextButton(onClick = { scanFallback = false; launchCamera() }) { Text(s.useCamera) } },
+        dismissButton = { TextButton(onClick = { scanFallback = false }) { Text(s.cancel) } }
+    )
     compareTarget?.let { id ->
         ConsentDialog(s.consentCompareBody, onSend = { remember -> vm.compareWith(id, remember); sheet = "assistant" }) { compareTarget = null }
     }

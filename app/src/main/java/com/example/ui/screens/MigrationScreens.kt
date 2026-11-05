@@ -139,6 +139,20 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
         error = null
         data.receive(offer, s.analyzing) { goPreview() }
     }
+    val scope = rememberCoroutineScope()
+    val qrFile = remember { java.io.File(context.cacheDir, "camera/qr.jpg") }
+    val qrCapture = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) scope.launch {
+            val text = withContext(Dispatchers.Default) { com.example.ui.platform.QrDecoder.decode(qrFile) }
+            val offer = text?.let { DeviceTransfer.parse(it) }
+            if (offer == null) error = s.qrNotFound else connect(offer)
+        }
+    }
+    fun qrPhoto() {
+        qrFile.parentFile?.mkdirs()
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", qrFile)
+        runCatching { qrCapture.launch(uri) }.onFailure { error = s.scannerUnavailable }
+    }
 
     PageScaffold(s.transferTitle, onBack = { data.cancelTransfer(); session.back() }) {
         item { ExpandableText(s.transferIntro, Modifier.padding(horizontal = 20.dp), collapsedLines = 4, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -181,10 +195,13 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
                         }
                         Button(onClick = {
                             val scanner = runCatching { com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context) }.getOrNull()
-                            if (scanner == null) error = s.scannerUnavailable
-                            else scanner.startScan()
-                                .addOnSuccessListener { b -> connect(b.rawValue?.let { DeviceTransfer.parse(it) }) }
-                                .addOnFailureListener { error = s.scannerUnavailable }
+                            scope.launch {
+                                if (scanner != null && com.example.ui.platform.GmsModules.ready(context, scanner)) {
+                                    scanner.startScan()
+                                        .addOnSuccessListener { b -> connect(b.rawValue?.let { DeviceTransfer.parse(it) }) }
+                                        .addOnFailureListener { qrPhoto() }
+                                } else qrPhoto() // no Google scanner: photo + on-device decoding
+                            }
                         }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Rounded.QrCodeScanner, null); Spacer(Modifier.width(8.dp)); Text(s.scanQr)
                         }

@@ -143,6 +143,12 @@ class Strings(val isArabic: Boolean) {
     val recording = t("جارٍ التسجيل", "Recording")
     val micPermission = t("يلزم إذن الميكروفون لتسجيل الملاحظات الصوتية.", "Microphone permission is needed to record voice notes.")
     val attachments = t("المرفقات", "Attachments")
+    val scanIncompleteTitle = t("لم يكتمل المسح", "Scan didn't finish")
+    val scanIncompleteBody = t("إذا ظهرت لك رسالة «حدث خطأ ما» من خدمات Google، فماسح Google غير متاح حالياً على هذا الهاتف. يمكنك التقاط صورة بالكاميرا بدلاً منه، وسيقرأ Notea النص منها على الجهاز.",
+        "If Google services showed “Something went wrong”, Google's scanner isn't available on this phone right now. You can take a photo with the camera instead; Notea will read the text on the device.")
+    val useCamera = t("التقاط بالكاميرا", "Use the camera")
+    val scannerUsingCamera = t("ماسح Google غير جاهز على هذا الهاتف، فاستخدمنا الكاميرا مباشرة.", "Google's scanner isn't ready on this phone, so the camera is used instead.")
+    val qrNotFound = t("لم نجد رمز QR في الصورة. قرّب الكاميرا من الرمز أو أدخل العنوان والرمز يدوياً.", "No QR code found in the photo. Move closer to the code, or enter the address and code manually.")
     val scanDocument = t("مسح مستند", "Scan document")
     val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
     val ocrPending = t("جارٍ قراءة النص على الجهاز…", "Reading text on the device…")

@@ -17,8 +17,8 @@ android {
     applicationId = "com.notea.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.1.0"
+    versionCode = 3
+    versionName = "1.1.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // Native OCR libraries for phones only (arm). x86_64 (emulators) is added to debug builds.
