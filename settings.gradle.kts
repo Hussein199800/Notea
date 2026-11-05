@@ -19,9 +19,11 @@ dependencyResolutionManagement {
   repositories {
     google()
     mavenCentral()
+    // Tesseract4Android (on-device Arabic/English OCR) is published on JitPack only.
+    maven("https://jitpack.io") { content { includeGroupByRegex("com\\.github\\.adaptech-cz.*") } }
   }
 }
 
-rootProject.name = "Arabic Notes"
+rootProject.name = "Notea"
 
 include(":app")

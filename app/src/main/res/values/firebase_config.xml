@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Firestore database id of YOUR Firebase project ("(default)" for the default database). -->
+    <string name="firestore_database_id" translatable="false">(default)</string>
+</resources>

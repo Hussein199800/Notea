@@ -1,22 +1,26 @@
-# VaultNotes Security Specification (Phase 0 TDD)
+# Notea Security Specification (v2)
 
-## 1. Data Invariants
-1. **Strict Multi-Tenant Isolation**: Every document in `/users/{userId}` and `/users/{userId}/notes/{noteId}` belongs exclusively to `userId == request.auth.uid`. Cross-user reads, writes, lists, and deletes are strictly forbidden.
-2. **Schema & Size Bounds**: Every string field (`title`, `content`, `category`, `appPinHash`, `notePinHash`, `lockHint`, `languageCode`) has strict `.size()` limits to prevent Denial-of-Wallet storage exhaustion.
-3. **Immutable Provenance**: On `update`, `userId` and `createdAt` are strictly immutable (`incoming().userId == existing().userId` and `incoming().createdAt == existing().createdAt`).
-4. **Server Timestamp Enforcement**: `createdAt` and `updatedAt` must be valid Firestore `timestamp` objects bounded by `<= request.time`.
-5. **Shadow Field Rejection**: `hasOnly()` enforces exact field allowlists on both `create` and `update`.
+## Encryption model
+- **Master key (MK):** random 256-bit key per account. Encrypts locked-note content (`ENCv2:` AES-256-GCM, body + checklist together) and attachments of locked notes (file-level AES-GCM).
+- **On device:** MK is stored only wrapped by a non-exportable Android Keystore AES key (`notea_device_kek_v2`). It is excluded from Android auto-backup.
+- **Across devices:** MK is wrapped by PBKDF2-HMAC-SHA256(vault passphrase, 210k iterations, random salt) into a *vault envelope* stored at `users/{uid}/vault/key` and inside `.notea` backups. Only ciphertext leaves the device; a forgotten passphrase cannot be recovered.
+- **No plaintext fallback:** any encryption failure aborts the write (`CryptoException` / `VaultLockedException`); encryption is round-trip verified before storing.
+- **PINs** gate the UI only (app lock / note lock) and are never keys. Stored as salted PBKDF2 (`p2$iter$salt$hash`); legacy SHA-256 hashes are still accepted and upgraded on next successful entry.
+- **Legacy `ENCv1`** payloads are decrypt-only and re-encrypted to v2 once the vault is ready. Payloads made with another device's Keystore remain untouched (not readable there by design of v1).
+- The vault is created only after the server confirms the account has none; rules forbid replacing the key id.
 
-## 2. The "Dirty Dozen" Payloads
-1. **Unauthenticated Read/Write**: Caller with `request.auth == null` attempting `get`, `list`, `create`, `update`, or `delete` on `/users/{userId}/notes/{noteId}`.
-2. **Cross-User Note Espionage**: Authenticated user `alice_123` attempting `get` or `list` on `/users/bob_456/notes`.
-3. **Identity Spoofing on Create**: Authenticated user `alice_123` creating a note under `/users/alice_123/notes/n1` with `userId: "bob_456"`.
-4. **Shadow/Ghost Field Injection**: Creating or updating a note with an undeclared field `isAdmin: true` or `unboundedBlob: "..."`.
-5. **Immutable Field Mutation**: Updating an existing note to change `createdAt` or `userId`.
-6. **Title Size Overflow**: Creating or updating a note with `title` exceeding 200 characters or empty (`""`).
-7. **Content Size Overflow**: Creating or updating a note with `content` exceeding 20,000 characters.
-8. **Invalid Color Index**: Setting `colorIndex` to `-1`, `99`, or a string `"red"` instead of `int` in `0..5`.
-9. **Future Timestamp Spoofing**: Passing a client timestamp in the future (`> request.time`) for `createdAt` or `updatedAt`.
-10. **Unfiltered Collection Query**: Querying `/users/{userId}/notes` without matching `userId` ownership constraints.
-11. **Invalid Language Code in Settings**: Writing `languageCode: "invalid_lang"` to `/users/{userId}`.
-12. **Explicit Null on Required Field**: Updating `title: null` or `isLocked: null` on an existing note.
+## Data invariants (Firestore rules)
+1. Strict per-user isolation for `users/{uid}`, `notes`, `folders`, `vault` (`request.auth.uid == uid`, `userId` field match).
+2. Field allowlists (`hasOnly`) and type/size checks for v1 + v2 note fields; colorIndex 0–7; content ≤ 700k chars; tags ≤ 50; checklist ≤ 500.
+3. Locked notes may not carry plaintext checklist items or a block layout (`blocks`); both live inside the encrypted payload.
+4. `createdAt`/`userId` immutable on update; client timestamps tolerated up to 1 day of clock skew.
+5. Vault envelope: owner-only, cannot be deleted, KDF iterations ≥ 100k, key id cannot change.
+6. Owner may `get` a not-yet-existing document (pre-write conflict check).
+
+Tests: `firestore.test.js` (10 emulator tests) and `SyncEmulatorTest` (end-to-end sync, conflict, ciphertext-only uploads).
+
+## Additional data flows (v1.1)
+- **OCR** runs fully on device (Tesseract). OCR text is stored unencrypted for search, so it is never produced for locked notes and is erased when a note gets locked.
+- **AI assistant** (optional, off by default): the user's own Gemini API key is stored wrapped by Android Keystore (`notea_ai`, excluded from backups) and sent only as the `x-goog-api-key` header to `generativelanguage.googleapis.com`. Each request requires consent (unless the user opted out of the prompt), sends one note (or two for "compare"), max 12,000 characters. Locked notes are never sent.
+- **Phone-to-phone transfer**: LAN-only TCP; the file is a `.notea` backup encrypted with the 12-character one-time code (AES-256-GCM, PBKDF2); the code is shown only on the sender's screen; 5 wrong codes stop the server.
+- **Link previews / Gemini** are the only network calls besides Firebase (when configured).
