@@ -100,7 +100,8 @@ class ImportTest {
     @Test fun pdf_and_image_keptAsOriginal() = runBlocking {
         val p = im.preview("u", ImportSource.SAMSUNG, listOf(input("handwriting.pdf", "%PDF-1.4 x".toByteArray()), input("scan.jpg", PNG)))
         assertEquals(2, p.candidates.size)
-        assertTrue(p.candidates.all { ImportWarning.TEXT_NOT_EXTRACTED in it.warnings && it.attachments.size == 1 })
+        assertTrue(p.candidates.all { it.warnings.isEmpty() && it.attachments.size == 1 })
+        assertEquals(setOf(AttachmentKind.PDF, AttachmentKind.IMAGE), p.candidates.map { it.attachments.single().kind }.toSet())
     }
 
     @Test fun json_keepAndNoteaV1_andUnsupported() = runBlocking {

@@ -19,6 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RevisionEntity::class,
         TemplateEntity::class,
         NoteFtsEntity::class,
+        NoteBlockEntity::class,
         LegacyNoteEntity::class
     ],
     version = NoteaDatabase.VERSION,
@@ -35,9 +36,10 @@ abstract class NoteaDatabase : RoomDatabase() {
     abstract fun templateDao(): TemplateDao
     abstract fun searchDao(): SearchDao
     abstract fun ownershipDao(): OwnershipDao
+    abstract fun blockDao(): BlockDao
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         /** Same file name as v1 so existing installs are migrated in place. */
         const val FILE_NAME = "arabic_notes_offline.db"
 
@@ -56,7 +58,7 @@ abstract class NoteaDatabase : RoomDatabase() {
                 // in development rather than silently wipe user data in production.
                 .build()
 
-        val ALL_MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2)
+        val ALL_MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }
 
@@ -80,5 +82,16 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
             FROM local_notes
             """.trimIndent()
         )
+    }
+}
+
+/**
+ * v2 -> v3 (additive only): ordered content blocks, checklist grouping, named versions.
+ * Existing notes need no conversion: a note without block rows is shown with the classic
+ * layout (text, then checklist, then attachments).
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        V3Schema.STATEMENTS.forEach { db.execSQL(it) }
     }
 }

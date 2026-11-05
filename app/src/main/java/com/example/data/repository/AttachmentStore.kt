@@ -101,6 +101,8 @@ class AttachmentStore(private val context: Context) {
             val ext = name.substringAfterLast('.', "").lowercase()
             return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: when (ext) {
                 "md", "markdown" -> "text/markdown"
+                "heic" -> "image/heic"; "heif" -> "image/heif"; "avif" -> "image/avif"
+                "tif", "tiff" -> "image/tiff"; "svg" -> "image/svg+xml"; "webp" -> "image/webp"
                 "notea" -> "application/x-notea-backup"
                 else -> "application/octet-stream"
             }

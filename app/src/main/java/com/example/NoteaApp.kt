@@ -26,7 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class NoteaApp : Application() {
+class NoteaApp : Application(), coil.ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
@@ -35,6 +35,15 @@ class NoteaApp : Application() {
         container = AppContainer(this)
         container.onAppStart()
     }
+
+    /** Images: animated GIF/WebP (ImageDecoder on 28+, GifDecoder before) and SVG everywhere. */
+    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this)
+        .components {
+            if (android.os.Build.VERSION.SDK_INT >= 28) add(coil.decode.ImageDecoderDecoder.Factory()) else add(coil.decode.GifDecoder.Factory())
+            add(coil.decode.SvgDecoder.Factory())
+        }
+        .crossfade(true)
+        .build()
 }
 
 /** Manual dependency container (no DI framework needed for this app size). */
@@ -56,6 +65,7 @@ class AppContainer(val app: Application) {
         override fun onReminderChanged(reminder: ReminderEntity, noteTitle: String, locked: Boolean) =
             reminderScheduler.schedule(reminder, noteTitle, locked)
         override fun onReminderCancelled(reminderId: String) = reminderScheduler.cancel(reminderId)
+        override fun onScannableAttachment(attachment: com.example.data.local.AttachmentEntity) = onImageAttachmentAdded(attachment)
     })
 
     val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance(app.getString(R.string.firestore_database_id)) }
@@ -67,6 +77,11 @@ class AppContainer(val app: Application) {
     val firebaseAvailable: Boolean by lazy { runCatching { com.google.firebase.FirebaseApp.getApps(app).isNotEmpty() }.getOrDefault(false) }
 
     /** Signed-in Firebase account, if any. */
+    /** Called after an image attachment is stored (OCR hook). */
+    fun onImageAttachmentAdded(a: com.example.data.local.AttachmentEntity) {
+        com.example.ocr.OcrWorker.enqueue(app, a.id)
+    }
+
     fun currentUid(): String? = if (!firebaseAvailable) null else runCatching { Firebase.auth.currentUser?.uid }.getOrNull()
 
     /** The account whose notes are shown: the signed-in one, or the on-device local account. */

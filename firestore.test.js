@@ -204,6 +204,7 @@ function v2NotePayload(userId, now = new Date(Date.now() - 1000)) {
     reminderAt: 0,
     clientUpdatedAt: now.getTime(),
     deviceId: "device-1",
+    blocks: [{ id: "b1", type: "text", len: 5 }, { id: "b2", type: "attachment", attachmentId: "a1" }],
   };
 }
 
@@ -227,6 +228,8 @@ test("7. Invalid v2 values are rejected (color, plaintext checklist on locked no
   await assertFails(notes.doc("bad2").set({ ...v2NotePayload(ALICE_UID), isLocked: true }));
   await assertFails(notes.doc("bad3").set({ ...v2NotePayload(ALICE_UID), content: "x".repeat(700001) }));
   await assertFails(notes.doc("bad4").set({ ...v2NotePayload(ALICE_UID), tags: "not-a-list" }));
+  // Locked note may not expose its block layout.
+  await assertFails(notes.doc("bad5").set({ ...v2NotePayload(ALICE_UID), isLocked: true, checklist: [] }));
   await assertSucceeds(notes.doc("ok").set(v2NotePayload(ALICE_UID)));
   await assertFails(notes.doc("ok").update({ createdAt: new Date(Date.now() - 999999), updatedAt: new Date() }));
 });

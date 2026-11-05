@@ -150,6 +150,9 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE id = :id")
     suspend fun get(id: String): AttachmentEntity?
 
+    @Query("SELECT * FROM attachments WHERE noteId = :noteId ORDER BY position, createdAt")
+    fun observeForNote(noteId: String): kotlinx.coroutines.flow.Flow<List<AttachmentEntity>>
+
     @Query("SELECT * FROM attachments WHERE userId = :userId")
     suspend fun allForUser(userId: String): List<AttachmentEntity>
 
@@ -198,8 +201,12 @@ interface RevisionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(rev: RevisionEntity)
 
-    @Query("DELETE FROM note_revisions WHERE noteId = :noteId AND id NOT IN (SELECT id FROM note_revisions WHERE noteId = :noteId ORDER BY createdAt DESC LIMIT :keep)")
+    /** Keeps the newest [keep] automatic versions; named versions are never trimmed. */
+    @Query("DELETE FROM note_revisions WHERE noteId = :noteId AND label = '' AND id NOT IN (SELECT id FROM note_revisions WHERE noteId = :noteId AND label = '' ORDER BY createdAt DESC LIMIT :keep)")
     suspend fun trim(noteId: String, keep: Int)
+
+    @Query("UPDATE note_revisions SET label = :label WHERE id = :id")
+    suspend fun setLabel(id: String, label: String)
 }
 
 @Dao
@@ -270,4 +277,22 @@ interface OwnershipDao {
 
     @Query("SELECT COUNT(*) FROM notes WHERE userId = :uid")
     suspend fun countNotes(uid: String): Int
+}
+
+@Dao
+interface BlockDao {
+    @Query("SELECT * FROM note_blocks WHERE noteId = :noteId ORDER BY position")
+    suspend fun forNote(noteId: String): List<NoteBlockEntity>
+
+    @Query("DELETE FROM note_blocks WHERE noteId = :noteId")
+    suspend fun deleteForNote(noteId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(blocks: List<NoteBlockEntity>)
+
+    @Transaction
+    suspend fun replaceForNote(noteId: String, blocks: List<NoteBlockEntity>) {
+        deleteForNote(noteId)
+        if (blocks.isNotEmpty()) insertAll(blocks)
+    }
 }

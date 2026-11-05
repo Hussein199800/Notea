@@ -207,14 +207,24 @@ class EditorViewModel(
             _state.value = _state.value.copy(busy = true)
             ensurePersisted()
             val info = repo.attachments.describe(uri)
-            val kind = kindHint ?: when {
-                info.mime.startsWith("image/") -> AttachmentKind.IMAGE
-                info.mime == "application/pdf" -> AttachmentKind.PDF
-                info.mime.startsWith("audio/") -> AttachmentKind.AUDIO
+            // Copy to a temp file first so images can be normalized (HEIC/AVIF/TIFF -> JPEG/PNG).
+            val tmp = File(container.app.cacheDir, "attach_" + System.nanoTime())
+            container.app.contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return@launch
+            var name = info.name; var mime = info.mime; var file = tmp
+            val wantsImage = kindHint == AttachmentKind.IMAGE || com.example.core.media.ImageNormalizer.isImageName(info.name, info.mime)
+            var isImage = false
+            if (wantsImage) {
+                val p = com.example.core.media.ImageNormalizer.prepare(tmp, info.name, info.mime)
+                name = p.name; mime = p.mime; file = p.file; isImage = p.isImage
+            }
+            val kind = when {
+                isImage -> AttachmentKind.IMAGE
+                mime == "application/pdf" -> AttachmentKind.PDF
+                mime.startsWith("audio/") -> AttachmentKind.AUDIO
                 else -> AttachmentKind.FILE
             }
-            val input = container.app.contentResolver.openInputStream(uri) ?: return@launch
-            repo.addAttachment(uid, noteId, kind, info.name, info.mime, input)
+            val added = repo.addAttachment(uid, noteId, kind, name, mime, file.inputStream())
+            tmp.delete(); if (file != tmp) file.delete()
             refreshAttachments()
         } catch (e: VaultLockedException) {
             _events.tryEmit(EditorEvent.VaultRequired)

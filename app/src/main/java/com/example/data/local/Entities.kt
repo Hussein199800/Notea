@@ -60,7 +60,9 @@ data class ChecklistItemEntity(
     val noteId: String,
     val text: String,
     val checked: Boolean,
-    val position: Int
+    val position: Int,
+    /** Checklist block this item belongs to (v3); null = the note's default checklist. */
+    @ColumnInfo(defaultValue = "NULL") val blockId: String? = null
 )
 
 @Entity(tableName = "tags", indices = [Index(value = ["userId", "normalized"], unique = true)])
@@ -170,7 +172,36 @@ data class RevisionEntity(
     /** JSON array of {text, checked}. */
     val checklistJson: String,
     val createdAt: Long,
-    val reason: String
+    val reason: String,
+    /** User-given name ("before the big rewrite"); empty for automatic versions. */
+    @ColumnInfo(defaultValue = "''") val label: String = "",
+    /** Block layout at that time (JSON), empty for pre-v3 versions. Ciphertext layout lives in [body] for locked notes. */
+    @ColumnInfo(defaultValue = "''") val blocksJson: String = ""
+)
+
+object BlockType {
+    const val TEXT = "text"
+    const val CHECKLIST = "checklist"
+    const val ATTACHMENT = "attachment"
+}
+
+/**
+ * Ordered content of a note (v3): text paragraphs, checklists and attachments in any order.
+ * Text lives here as well as (joined) in notes.body, which stays the canonical searchable text.
+ * Locked notes keep their layout inside the encrypted payload, never in this table.
+ */
+@Entity(
+    tableName = "note_blocks",
+    foreignKeys = [ForeignKey(entity = NoteEntity::class, parentColumns = ["id"], childColumns = ["noteId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("noteId")]
+)
+data class NoteBlockEntity(
+    @PrimaryKey val id: String,
+    val noteId: String,
+    val position: Int,
+    val type: String,
+    val text: String = "",
+    val attachmentId: String? = null
 )
 
 @Entity(tableName = "templates", indices = [Index("userId")])
@@ -209,7 +240,9 @@ data class NoteWithDetails(
     @Relation(parentColumn = "id", entityColumn = "noteId")
     val attachments: List<AttachmentEntity>,
     @Relation(parentColumn = "id", entityColumn = "noteId")
-    val reminders: List<ReminderEntity>
+    val reminders: List<ReminderEntity>,
+    @Relation(parentColumn = "id", entityColumn = "noteId")
+    val blocks: List<NoteBlockEntity> = emptyList()
 ) {
     val sortedChecklist get() = checklist.sortedBy { it.position }
     val activeReminder get() = reminders.filter { it.status != ReminderStatus.DONE }.minByOrNull { it.triggerAt }

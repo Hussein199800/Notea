@@ -329,6 +329,7 @@ class Strings(val isArabic: Boolean) {
         ImportWarning.UNREADABLE -> t("ملف تالف أو غير قابل للقراءة", "File is damaged or unreadable")
         ImportWarning.LOCKED_CONTENT -> t("ملاحظة مقفلة: تحتاج عبارة مرور الخزنة الأصلية لفتحها", "Locked note: needs the original vault passphrase to open")
         ImportWarning.TRUNCATED -> t("الأرشيف كبير جداً؛ تم تخطي جزء منه", "Archive too large; part of it was skipped")
+        ImportWarning.IMAGE_KEPT_AS_FILE -> t("صيغة الصورة غير مدعومة على هذا الجهاز؛ حُفظ الملف الأصلي كمرفق", "This image format isn't supported on this device; the original file was kept")
     }
 
     // Backup

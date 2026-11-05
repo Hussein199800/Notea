@@ -236,7 +236,7 @@ object DocxHandler : ImportHandler {
     }
 }
 
-/** PDFs (Samsung/Huawei handwriting exports) are kept as the original file. */
+/** PDFs (Samsung/Huawei exports) are kept as the original file; OCR extracts printed text afterwards. */
 object PdfHandler : ImportHandler {
     override fun canHandle(input: ImportInput) = input.extension == "pdf" || input.mime == "application/pdf"
     override fun parse(input: ImportInput, ctx: ImportContext): ParseOutput {
@@ -244,21 +244,23 @@ object PdfHandler : ImportHandler {
         val title = TitleHeuristics.fileTitle(input.name)
         return ParseOutput(listOf(ImportCandidate(Ids.newId(), input.name, title, "",
             createdAt = input.lastModified, updatedAt = input.lastModified,
-            attachments = listOf(ImportedAttachment(AttachmentKind.PDF, input.name, "application/pdf", f)),
-            warnings = setOf(ImportWarning.TEXT_NOT_EXTRACTED))))
+            // Text is read later by on-device OCR (printed text; handwriting stays as the original PDF).
+            attachments = listOf(ImportedAttachment(AttachmentKind.PDF, input.name, "application/pdf", f)))))
     }
 }
 
 object ImageHandler : ImportHandler {
-    private val exts = setOf("png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "bmp")
+    private val exts = setOf("png", "jpg", "jpeg", "webp", "gif", "heic", "heif", "avif", "bmp", "tif", "tiff", "svg")
     override fun canHandle(input: ImportInput) = input.extension in exts || input.mime.startsWith("image/")
     override fun parse(input: ImportInput, ctx: ImportContext): ParseOutput {
         val f = ctx.stash(input.name, input)
         val mime = input.mime.takeIf { it.startsWith("image/") } ?: com.example.data.repository.AttachmentStore.guessMime(input.name)
+        val p = com.example.core.media.ImageNormalizer.prepare(f, input.name, mime)
+        val att = ImportedAttachment(if (p.isImage) AttachmentKind.IMAGE else AttachmentKind.FILE, p.name, p.mime, p.file)
         return ParseOutput(listOf(ImportCandidate(Ids.newId(), input.name, TitleHeuristics.fileTitle(input.name), "",
             createdAt = input.lastModified, updatedAt = input.lastModified,
-            attachments = listOf(ImportedAttachment(AttachmentKind.IMAGE, input.name, mime, f)),
-            warnings = setOf(ImportWarning.TEXT_NOT_EXTRACTED))))
+            attachments = listOf(att),
+            warnings = if (p.unsupported) setOf(ImportWarning.IMAGE_KEPT_AS_FILE) else emptySet())))
     }
 }
 

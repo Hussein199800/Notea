@@ -21,7 +21,10 @@ android {
     versionName = "1.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // Native OCR libraries: phones (arm) + x86_64 emulators only, to keep the APK small.
+    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
   }
+  androidResources { noCompress += listOf("traineddata") }
 
   // Release signing: the keystore is NEVER committed. Provide it via keystore.properties
   // (gitignored, see keystore.properties.example) or NOTEA_* environment variables (CI).
@@ -96,6 +99,12 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
+  implementation(libs.coil.gif)
+  implementation(libs.coil.svg)
+  implementation(libs.tesseract4android)
+  implementation(libs.zxing.core)
+  implementation(libs.mlkit.document.scanner)
+  implementation(libs.gms.code.scanner)
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.androidx.glance.appwidget)
   implementation(libs.androidx.glance.material3)

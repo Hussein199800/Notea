@@ -99,7 +99,8 @@ class SyncEngine(
         val d = db.noteDao().getNoteWithDetails(n.id) ?: return
         val folderKey = n.folderId?.takeIf { it.startsWith("legacy-") }?.removePrefix("legacy-") ?: "personal"
         val map = FirestoreMapper.noteToMap(
-            n, d.checklist.toDrafts(), d.tags.map { it.name }, d.activeReminder?.triggerAt, folderKey, deviceId
+            n, d.checklist.toDrafts(), d.tags.map { it.name }, d.activeReminder?.triggerAt, folderKey, deviceId,
+            d.blocks.sortedBy { it.position }.map { com.example.data.repository.BlockDraft(it.id, it.type, it.text, it.attachmentId) }.ifEmpty { null }
         )
         withTimeout(TIMEOUT) {
             // createdAt is immutable server-side and v1 docs hold microsecond server timestamps:
@@ -120,7 +121,7 @@ class SyncEngine(
             val key = id.removePrefix("legacy-")
             LegacyNoteParser.legacyFolderNames[key]?.let { repository.ensureFolder(uid, id, it.first) }
         }
-        repository.applyStored(uid, remote.note, remote.checklist, remote.tags, remote.reminderAt)
+        repository.applyStored(uid, remote.note, remote.checklist, remote.tags, remote.reminderAt, remote.blocks)
     }
 
     suspend fun handleRemoteNote(uid: String, remote: RemoteNote) = mutex.withLock {

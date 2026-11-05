@@ -12,7 +12,7 @@
 ## Data invariants (Firestore rules)
 1. Strict per-user isolation for `users/{uid}`, `notes`, `folders`, `vault` (`request.auth.uid == uid`, `userId` field match).
 2. Field allowlists (`hasOnly`) and type/size checks for v1 + v2 note fields; colorIndex 0–7; content ≤ 700k chars; tags ≤ 50; checklist ≤ 500.
-3. Locked notes may not carry plaintext checklist items.
+3. Locked notes may not carry plaintext checklist items or a block layout (`blocks`); both live inside the encrypted payload.
 4. `createdAt`/`userId` immutable on update; client timestamps tolerated up to 1 day of clock skew.
 5. Vault envelope: owner-only, cannot be deleted, KDF iterations ≥ 100k, key id cannot change.
 6. Owner may `get` a not-yet-existing document (pre-write conflict check).

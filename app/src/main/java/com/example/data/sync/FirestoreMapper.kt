@@ -17,7 +17,8 @@ data class RemoteNote(
     val checklist: List<ChecklistDraft>,
     val tags: List<String>,
     val reminderAt: Long?,
-    val clientUpdatedAt: Long
+    val clientUpdatedAt: Long,
+    val blocks: List<com.example.data.repository.BlockDraft>? = null
 )
 
 object FirestoreMapper {
@@ -25,7 +26,7 @@ object FirestoreMapper {
 
     fun noteToMap(
         n: NoteEntity, checklist: List<ChecklistDraft>, tags: List<String>, reminderAt: Long?,
-        folderLegacyKey: String, deviceId: String
+        folderLegacyKey: String, deviceId: String, blocks: List<com.example.data.repository.BlockDraft>? = null
     ): Map<String, Any> = mapOf(
         "userId" to n.userId,
         "title" to n.title.ifBlank { "-" }.take(200),
@@ -45,7 +46,14 @@ object FirestoreMapper {
         "trashedAt" to (n.trashedAt ?: 0L),
         "folderId" to (n.folderId ?: ""),
         "tags" to tags.take(50),
-        "checklist" to checklist.take(500).map { mapOf("id" to it.id, "text" to it.text.take(1000), "checked" to it.checked) },
+        "checklist" to checklist.take(500).map { mapOf("id" to it.id, "text" to it.text.take(1000), "checked" to it.checked, "blockId" to (it.blockId ?: "")) },
+        // Layout only: text blocks carry their length; the text itself is in "content" (no duplication).
+        "blocks" to (if (n.isLocked || blocks == null) emptyList() else blocks.take(500).map { b ->
+            when (b.type) {
+                com.example.data.local.BlockType.TEXT -> mapOf("id" to b.id, "type" to b.type, "len" to b.text.length.toLong())
+                else -> mapOf("id" to b.id, "type" to b.type, "attachmentId" to (b.attachmentId ?: ""))
+            }
+        }),
         "reminderAt" to (reminderAt ?: 0L),
         "clientUpdatedAt" to n.updatedAt,
         "deviceId" to deviceId
@@ -66,8 +74,16 @@ object FirestoreMapper {
         return if (schema >= 2L) {
             @Suppress("UNCHECKED_CAST")
             val checklist = (data["checklist"] as? List<Map<String, Any?>>).orEmpty().map {
-                ChecklistDraft((it["id"] as? String).orEmpty().ifBlank { Ids.newId() }, it["text"] as? String ?: "", it["checked"] as? Boolean ?: false)
+                ChecklistDraft((it["id"] as? String).orEmpty().ifBlank { Ids.newId() }, it["text"] as? String ?: "", it["checked"] as? Boolean ?: false,
+                    (it["blockId"] as? String)?.takeIf { b -> b.isNotBlank() })
             }
+            @Suppress("UNCHECKED_CAST")
+            val layout = (data["blocks"] as? List<Map<String, Any?>>).orEmpty().mapNotNull { b ->
+                val id = b["id"] as? String ?: return@mapNotNull null
+                val type = b["type"] as? String ?: return@mapNotNull null
+                Triple(id, type, if (type == com.example.data.local.BlockType.TEXT) b["len"] else (b["attachmentId"] as? String)?.ifBlank { null })
+            }
+            val blocks = if (isLocked || layout.isEmpty()) null else com.example.data.repository.Blocks.fromLayout(layout, content)
             @Suppress("UNCHECKED_CAST")
             val tags = (data["tags"] as? List<String>).orEmpty()
             val trashedAt = (data["trashedAt"] as? Number)?.toLong()?.takeIf { it > 0 }
@@ -92,7 +108,8 @@ object FirestoreMapper {
                 checklist = checklist,
                 tags = tags,
                 reminderAt = (data["reminderAt"] as? Number)?.toLong()?.takeIf { it > 0 },
-                clientUpdatedAt = clientUpdatedAt
+                clientUpdatedAt = clientUpdatedAt,
+                blocks = blocks
             )
         } else {
             val p = LegacyNoteParser.parse(if (isLocked) "" else content, category, lockHint)

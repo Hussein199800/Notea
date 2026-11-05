@@ -22,7 +22,9 @@ enum class ImportWarning {
     /** Locked note from a backup: needs the vault passphrase of the original account to open. */
     LOCKED_CONTENT,
     /** Archive limits reached (too many entries / too large); remaining items skipped. */
-    TRUNCATED
+    TRUNCATED,
+    /** Image format can't be decoded on this device; the original file is kept as an attachment. */
+    IMAGE_KEPT_AS_FILE
 }
 
 data class ImportedAttachment(
@@ -36,7 +38,9 @@ data class ImportedAttachment(
     val url: String = "",
     val linkTitle: String = "",
     val linkDescription: String = "",
-    val createdAt: Long? = null
+    val createdAt: Long? = null,
+    /** Id in the source (backups): kept when free so block layouts stay valid. */
+    val originalId: String? = null
 ) {
     fun open(): InputStream = file.inputStream()
 }
@@ -65,6 +69,8 @@ data class ImportCandidate(
     /** Present for locked notes restored from a .notea backup: the stored (encrypted) form. */
     val storedLocked: NoteEntity? = null,
     val reminderAt: Long? = null,
+    /** Ordered layout from a .notea backup (attachment ids refer to [ImportedAttachment.originalId]). */
+    val blocks: List<com.example.data.repository.BlockDraft>? = null,
     val duplicate: DuplicateKind = DuplicateKind.NONE,
     val duplicateOfId: String? = null,
     val action: ImportAction = ImportAction.IMPORT

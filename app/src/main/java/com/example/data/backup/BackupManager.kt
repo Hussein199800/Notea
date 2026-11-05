@@ -26,6 +26,7 @@ import com.example.data.repository.NoteRepository
 import com.example.data.repository.checklistFromJson
 import com.example.data.repository.toDrafts
 import com.example.data.repository.toJson
+import com.example.data.repository.blocksToJson
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -157,11 +158,13 @@ class BackupManager(
                 put("importSource", n.importSource)
                 put("tags", JSONArray(d.tags.map { it.name }))
                 put("checklist", JSONArray(d.checklist.toDrafts().toJson()))
+                if (d.blocks.isNotEmpty()) put("blocks", JSONArray(d.blocks.sortedBy { it.position }
+                    .map { com.example.data.repository.BlockDraft(it.id, it.type, it.text, it.attachmentId) }.blocksToJson()))
                 put("reminders", JSONArray().also { a -> d.reminders.filter { it.status != ReminderStatus.DONE }.forEach { r ->
                     a.put(JSONObject().put("triggerAt", r.triggerAt).put("status", r.status)) } })
                 put("revisions", JSONArray().also { a -> revs.forEach { r ->
                     a.put(JSONObject().put("title", r.title).put("body", r.body).put("checklist", JSONArray(r.checklistJson.ifBlank { "[]" }))
-                        .put("createdAt", r.createdAt).put("reason", r.reason)) } })
+                        .put("createdAt", r.createdAt).put("reason", r.reason).put("label", r.label).put("blocks", r.blocksJson)) } })
                 put("attachments", JSONArray().also { a -> d.attachments.forEach { at ->
                     a.put(JSONObject().put("id", at.id).put("kind", at.kind).put("mime", at.mimeType).put("name", at.displayName)
                         .put("path", if (at.localPath.isNotBlank()) "attachments/${at.id}" else "")
@@ -331,6 +334,7 @@ class BackupManager(
         val warnings = mutableSetOf<ImportWarning>()
         var storedLocked: NoteEntity? = null
         var lockedPlainAvailable = false
+        var lockedPlainBlocks: List<com.example.data.repository.BlockDraft>? = null
         val atts = mutableListOf<ImportedAttachment>()
         var reencryptAttachmentsFrom: ByteArray? = null
 
@@ -340,8 +344,9 @@ class BackupManager(
                 keyId != null && keyId == currentKeyId -> Unit // same vault: keep ciphertext as is
                 backupMk != null && keyId == KeyVault.keyId(backupMk) && currentMk != null -> {
                     // Different vault: decrypt with the backup key, re-encrypt with ours on save.
-                    val (b, c) = LockedPayload.decode(NoteCipher.decryptText(backupMk, body))
-                    body = b; checklist = c; lockedPlainAvailable = true
+                    val content = LockedPayload.decodeContent(NoteCipher.decryptText(backupMk, body))
+                    body = content.body; checklist = content.checklist; lockedPlainAvailable = true
+                    lockedPlainBlocks = content.blocks
                     reencryptAttachmentsFrom = backupMk
                 }
                 else -> warnings += ImportWarning.LOCKED_CONTENT
@@ -377,7 +382,8 @@ class BackupManager(
                     kind = at.optString("kind"), name = at.optString("name"), mime = at.optString("mime"), file = file,
                     extractedText = at.optString("extractedText"), encrypted = encrypted && storedLocked != null,
                     durationMs = at.optLong("durationMs"), url = at.optString("url"), linkTitle = at.optString("linkTitle"),
-                    linkDescription = at.optString("linkDescription"), createdAt = at.optLong("createdAt").takeIf { it > 0 }
+                    linkDescription = at.optString("linkDescription"), createdAt = at.optLong("createdAt").takeIf { it > 0 },
+                    originalId = at.optString("id").takeIf { it.isNotBlank() }
                 ).let { if (path.isBlank()) it.copy(file = File("")) else it }
             }
         }
@@ -391,7 +397,9 @@ class BackupManager(
             createdAt = o.optLong("createdAt").takeIf { it > 0 }, updatedAt = o.optLong("updatedAt").takeIf { it > 0 },
             isPinned = o.optBoolean("isPinned"), isFavorite = o.optBoolean("isFavorite"), isArchived = o.optBoolean("isArchived"),
             trashedAt = if (o.isNull("trashedAt")) null else o.optLong("trashedAt"), colorIndex = o.optInt("colorIndex"),
-            attachments = atts, warnings = warnings, storedLocked = storedLocked, reminderAt = reminderAt
+            attachments = atts, warnings = warnings, storedLocked = storedLocked, reminderAt = reminderAt,
+            blocks = if (storedLocked != null) null else (o.optJSONArray("blocks")?.let { com.example.data.repository.blocksFromJson(it.toString()) }
+                ?: lockedPlainBlocks)
         ).also {
             if (lockedPlainAvailable) lockedPlainIds += id
         }
@@ -443,7 +451,8 @@ class BackupManager(
             for (i in 0 until arr.length()) {
                 val r = arr.getJSONObject(i)
                 repository.addRevision(newId, r.optString("title"), r.optString("body"),
-                    checklistFromJson(r.optJSONArray("checklist")?.toString() ?: "[]"), r.optString("reason"), r.optLong("createdAt"))
+                    checklistFromJson(r.optJSONArray("checklist")?.toString() ?: "[]"), r.optString("reason"), r.optLong("createdAt"),
+                    r.optString("label"), r.optString("blocks"))
             }
         }
         lockedPlainIds.clear(); pendingRevisions.clear()

@@ -50,10 +50,10 @@ class MigrationTest {
             execSQL("INSERT INTO local_notes VALUES ('n3','bob','Locked','ENCv1:abc','secret',0,0,1,'hash','hint★',0,1000,4000,0)")
             close()
         }
-        helper.runMigrationsAndValidate(dbName, 2, true, MIGRATION_1_2).close()
+        helper.runMigrationsAndValidate(dbName, 3, true, MIGRATION_1_2, com.example.data.local.MIGRATION_2_3).close()
 
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.databaseBuilder(ctx, NoteaDatabase::class.java, dbName).addMigrations(MIGRATION_1_2).allowMainThreadQueries().build()
+        val db = Room.databaseBuilder(ctx, NoteaDatabase::class.java, dbName).addMigrations(*NoteaDatabase.ALL_MIGRATIONS).allowMainThreadQueries().build()
         val repo = NoteRepository(db, testVault(), AttachmentStore(ctx))
         assertEquals(3, LegacyUpgrader(db, repo).run())
         assertEquals(0, LegacyUpgrader(db, repo).run()) // idempotent
@@ -81,6 +81,30 @@ class MigrationTest {
         assertEquals(3, db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM local_notes").use { it.moveToFirst(); it.getInt(0) })
         // Search index built for migrated notes.
         assertTrue(db.searchDao().search("alice", ArabicNormalizer.toFtsQuery("الخبز")!!).contains("n1"))
+        db.close()
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+class MigrationV3Test {
+    @get:Rule
+    val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), NoteaDatabase::class.java)
+
+    @Test
+    fun v2ToV3_isAdditive_andOldNotesUseClassicLayout() = runBlocking {
+        val name = "v3-test.db"
+        helper.createDatabase(name, 2).apply {
+            execSQL("INSERT INTO notes (id,userId,title,body,colorIndex,folderId,isPinned,isFavorite,isArchived,trashedAt,isLocked,lockPinHash,lockHint,createdAt,updatedAt,syncState,deleted,baseRemoteUpdatedAt,legacyCategory,legacyPending,importSource,contentHash) VALUES ('n','u','t','نص',0,NULL,0,0,0,NULL,0,'','',1,2,0,0,2,'',0,'','')")
+            execSQL("INSERT INTO checklist_items VALUES ('c','n','بند',1,0)")
+            execSQL("INSERT INTO note_revisions VALUES ('r','n','t','قديم','[]',1,'auto')")
+            close()
+        }
+        helper.runMigrationsAndValidate(name, 3, true, com.example.data.local.MIGRATION_2_3).close()
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.databaseBuilder(ctx, NoteaDatabase::class.java, name).addMigrations(*NoteaDatabase.ALL_MIGRATIONS).allowMainThreadQueries().build()
+        val d = db.noteDao().getNoteWithDetails("n")!!
+        assertEquals("نص", d.note.body); assertTrue(d.blocks.isEmpty()); assertNull(d.checklist.single().blockId)
+        val rev = db.revisionDao().forNote("n").single(); assertEquals("", rev.label); assertEquals("", rev.blocksJson)
         db.close()
     }
 }

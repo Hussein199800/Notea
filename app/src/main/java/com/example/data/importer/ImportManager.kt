@@ -235,25 +235,41 @@ class ImportManager(private val context: Context, private val repository: NoteRe
         } catch (e: VaultLockedException) {
             repository.save(uid, draft.copy(isLocked = false))
         }
-        val n = addAttachments(uid, newId, c)
+        val idMap = addAttachmentsMapped(uid, newId, c)
+        val n = idMap.size
+        // Restore the block layout (attachment references remapped when ids had to change).
+        if (c.blocks != null) repository.getNote(newId)?.let { d ->
+            repository.toDraft(uid, d)?.let { cur ->
+                val remapped = c.blocks.map { b -> if (b.attachmentId != null) b.copy(attachmentId = idMap[b.attachmentId] ?: b.attachmentId) else b }
+                repository.save(uid, cur.copy(blocks = com.example.data.repository.Blocks.reconcile(remapped, cur.body, cur.checklist, d.attachments.map { it.id }), updatedAt = null))
+            }
+        }
         if (c.reminderAt != null && c.reminderAt > System.currentTimeMillis()) repository.setReminder(uid, newId, c.reminderAt)
         // Attachments bump updatedAt; restore the original modification date.
         if (draft.updatedAt != null) repository.restoreTimestamps(newId, draft.createdAt, draft.updatedAt)
         return n
     }
 
-    private suspend fun addAttachments(uid: String, noteId: String, c: ImportCandidate): Int {
-        var n = 0
+    private suspend fun addAttachments(uid: String, noteId: String, c: ImportCandidate): Int = addAttachmentsMapped(uid, noteId, c).size
+
+    /** Adds the candidate's attachments; returns source id -> stored id. */
+    private suspend fun addAttachmentsMapped(uid: String, noteId: String, c: ImportCandidate): Map<String, String> {
+        val ids = linkedMapOf<String, String>()
         for (a in c.attachments) {
+            val key = a.originalId ?: com.example.data.repository.Ids.newId()
             if (a.encrypted && a.file.exists() && a.file.length() > 0) {
-                repository.addRawAttachment(uid, noteId, a)
+                ids[key] = repository.addRawAttachment(uid, noteId, a)
             } else {
-                repository.addAttachment(uid, noteId, a.kind, a.name, a.mime, if (a.file.exists()) a.open() else null,
-                    a.extractedText, a.durationMs, a.url, a.linkTitle, a.linkDescription, a.createdAt)
+                var att = a
+                if (a.kind == com.example.data.local.AttachmentKind.IMAGE && a.file.exists() && a.file.length() > 0) {
+                    val p = com.example.core.media.ImageNormalizer.prepare(a.file, a.name, a.mime)
+                    att = a.copy(kind = if (p.isImage) a.kind else com.example.data.local.AttachmentKind.FILE, name = p.name, mime = p.mime, file = p.file)
+                }
+                ids[key] = repository.addAttachment(uid, noteId, att.kind, att.name, att.mime, if (att.file.exists()) att.open() else null,
+                    att.extractedText, att.durationMs, att.url, att.linkTitle, att.linkDescription, att.createdAt, preferredId = a.originalId).id
             }
-            n++
         }
-        return n
+        return ids
     }
 
     companion object {
