@@ -67,6 +67,18 @@ class SettingsStore(context: Context) {
     fun localMode(): Boolean = prefs.getBoolean("local_mode", false)
     fun setLocalMode(on: Boolean) = prefs.edit().putBoolean("local_mode", on).apply()
 
+    /** First-run migration wizard was shown (or skipped) for this account. */
+    fun onboardingDone(uid: String) = prefs.getBoolean("onboarding_$uid", false)
+    fun setOnboardingDone(uid: String) = prefs.edit().putBoolean("onboarding_$uid", true).apply()
+
+    /** Memory suggestions hidden today: "yyyyDDD:id1,id2". */
+    fun dismissedMemory(today: String): Set<String> = prefs.getString("memory_dismissed", "")!!.let {
+        if (it.substringBefore(':') == today) it.substringAfter(':').split(',').filter { s -> s.isNotBlank() }.toSet() else emptySet()
+    }
+    fun dismissMemory(today: String, id: String) {
+        prefs.edit().putString("memory_dismissed", today + ":" + (dismissedMemory(today) + id).joinToString(",")).apply()
+    }
+
     fun legacyUpgradeDone(): Boolean = prefs.getBoolean("legacy_upgrade_v2", false)
     fun setLegacyUpgradeDone() = prefs.edit().putBoolean("legacy_upgrade_v2", true).apply()
 }

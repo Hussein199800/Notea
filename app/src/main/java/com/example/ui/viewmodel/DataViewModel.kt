@@ -28,6 +28,16 @@ sealed interface DataTask {
     data class Done(val result: ImportResult) : DataTask
 }
 
+sealed interface TransferState {
+    data object Idle : TransferState
+    data object Preparing : TransferState
+    data class Ready(val offer: com.example.data.transfer.DeviceTransfer.Offer, val qr: android.graphics.Bitmap) : TransferState
+    data class Progress(val sending: Boolean, val done: Long, val total: Long) : TransferState
+    data object Sent : TransferState
+    data object NoNetwork : TransferState
+    data object Failed : TransferState
+}
+
 /** Import center + backup/restore state (shared by the import, preview and backup screens). */
 class DataViewModel(private val container: AppContainer, private val uid: String) : ViewModel() {
     private val importer = container.importManager
@@ -156,6 +166,57 @@ class DataViewModel(private val container: AppContainer, private val uid: String
     }
 
     fun deleteSnapshot(f: File) = viewModelScope.launch(Dispatchers.IO) { f.delete(); _history.value = backups.history(uid) }
+
+    // ------------------------------------------------------------------ phone to phone
+    private val _transfer = MutableStateFlow<TransferState>(TransferState.Idle)
+    val transfer: StateFlow<TransferState> = _transfer.asStateFlow()
+    private var server: com.example.data.transfer.DeviceTransfer.Server? = null
+    private var transferJob: kotlinx.coroutines.Job? = null
+
+    /** Old phone: encrypts a full backup with a one-time code and waits for the new phone. */
+    fun startSending() {
+        transferJob?.cancel()
+        transferJob = viewModelScope.launch(Dispatchers.IO) {
+            val host = com.example.data.transfer.DeviceTransfer.localAddress()
+            if (host == null) { _transfer.value = TransferState.NoNetwork; return@launch }
+            _transfer.value = TransferState.Preparing
+            val code = com.example.data.transfer.DeviceTransfer.newCode()
+            val file = File(container.app.cacheDir, "transfer/outgoing.notea").apply { parentFile?.mkdirs() }
+            try {
+                file.outputStream().use { backups.export(uid, it, code.toCharArray()) }
+                val srv = com.example.data.transfer.DeviceTransfer.Server(file, code).also { server = it }
+                val offer = com.example.data.transfer.DeviceTransfer.Offer(host, srv.port, code)
+                _transfer.value = TransferState.Ready(offer, com.example.data.transfer.DeviceTransfer.qrBitmap(offer.toUri()))
+                val ok = srv.serve { done, total -> _transfer.value = TransferState.Progress(true, done, total) }
+                _transfer.value = if (ok) TransferState.Sent else if (srv.closed && _transfer.value is TransferState.Ready) TransferState.Idle else TransferState.Failed
+            } catch (e: Exception) {
+                _transfer.value = TransferState.Failed
+            } finally {
+                file.delete()
+            }
+        }
+    }
+
+    /** New phone: downloads, then opens the usual preview (counts, duplicates) before importing. */
+    fun receive(offer: com.example.data.transfer.DeviceTransfer.Offer, label: String, onReady: () -> Unit) {
+        transferJob?.cancel()
+        transferJob = viewModelScope.launch(Dispatchers.IO) {
+            val file = File(container.app.cacheDir, "transfer/incoming.notea").apply { parentFile?.mkdirs() }
+            _transfer.value = TransferState.Progress(false, 0, 1)
+            val r = com.example.data.transfer.DeviceTransfer.receive(offer, file) { d, t -> _transfer.value = TransferState.Progress(false, d, t) }
+            if (r.isFailure) { _transfer.value = TransferState.Failed; return@launch }
+            _transfer.value = TransferState.Idle
+            restorePreview(android.net.Uri.fromFile(file), offer.code.toCharArray(), null, label, onReady)
+        }
+    }
+
+    fun cancelTransfer() {
+        server?.close(); server = null
+        transferJob?.cancel()
+        _transfer.value = TransferState.Idle
+    }
+
+    override fun onCleared() { server?.close(); super.onCleared() }
 
     fun candidatesWithIssues(): List<ImportCandidate> = _preview.value?.candidates?.filter { it.warnings.isNotEmpty() }.orEmpty()
 }

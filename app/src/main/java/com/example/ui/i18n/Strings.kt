@@ -21,6 +21,7 @@ class Strings(val isArabic: Boolean) {
     val useWithoutAccount = t("استخدام بدون حساب", "Use without an account")
     val withoutAccountNote = t("تبقى ملاحظاتك على هذا الجهاز فقط. يمكنك تسجيل الدخول لاحقاً للمزامنة دون أن تفقد شيئاً.", "Your notes stay on this device only. You can sign in later to sync without losing anything.")
     val localAccount = t("على هذا الجهاز فقط (بدون حساب)", "On this device only (no account)")
+    val aiCredit = t("نماذج التعرّف على النص: Tesseract (Apache 2.0)", "OCR models: Tesseract (Apache 2.0)")
     val signInToSync = t("تسجيل الدخول للمزامنة", "Sign in to sync")
     val syncNotConfigured = t("المزامنة السحابية غير مفعّلة في هذا الإصدار. احمِ ملاحظاتك بالنسخ الاحتياطي، والنسخة التلقائية اليومية تعمل.", "Cloud sync isn't enabled in this build. Protect your notes with backups; the daily automatic backup is on.")
     val localSyncInfo = t("ملاحظاتك محفوظة على هذا الجهاز. سجّل الدخول لمزامنتها بين أجهزتك، وستنتقل كلها إلى حسابك.", "Your notes are saved on this device. Sign in to sync them across devices; they will all move to your account.")
@@ -142,6 +143,15 @@ class Strings(val isArabic: Boolean) {
     val recording = t("جارٍ التسجيل", "Recording")
     val micPermission = t("يلزم إذن الميكروفون لتسجيل الملاحظات الصوتية.", "Microphone permission is needed to record voice notes.")
     val attachments = t("المرفقات", "Attachments")
+    val scanDocument = t("مسح مستند", "Scan document")
+    val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
+    val ocrPending = t("جارٍ قراءة النص على الجهاز…", "Reading text on the device…")
+    val copy = t("نسخ", "Copy")
+    val copied = t("نُسخ النص", "Text copied")
+    val insertIntoNote = t("إدراج في الملاحظة", "Insert into note")
+    val moveUp = t("نقل لأعلى", "Move up")
+    val moveDown = t("نقل لأسفل", "Move down")
+    val removeBlock = t("إزالة", "Remove")
     val removeAttachment = t("إزالة المرفق", "Remove attachment")
     val openFile = t("فتح", "Open")
     val noAppToOpen = t("لا يوجد تطبيق لفتح هذا الملف", "No app can open this file")
@@ -166,6 +176,15 @@ class Strings(val isArabic: Boolean) {
     val reasonConflict = t("نسخة من جهاز آخر (تعارض)", "Other device (conflict)")
     val reasonBeforeRestore = t("قبل الاستعادة", "Before restore")
     val reasonMerge = t("قبل الدمج", "Before merge")
+    val reasonNamed = t("نسخة محفوظة", "Saved version")
+    val reasonAssistant = t("قبل تعديل المساعد", "Before assistant edit")
+    val saveNamedVersion = t("حفظ نسخة باسم", "Save version as…")
+    val versionName = t("اسم النسخة (مثلاً: قبل التعديل الكبير)", "Version name (e.g. before the big rewrite)")
+    val compareWithCurrent = t("مقارنة مع الحالية", "Compare with current")
+    val showVersionOnly = t("النسخة فقط", "This version only")
+    val diffStats = { added: Int, removed: Int -> t("+${num(added)} −${num(removed)} كلمة", "+$added −$removed words") }
+    val diffExplain = { added: Int, removed: Int -> t("منذ هذه النسخة: أُضيفت ${num(added)} كلمة (بالأخضر) وحُذفت ${num(removed)} (مشطوبة بالأحمر).",
+        "Since this version: $added words added (green), $removed removed (red, struck through).") }
     val saveAsTemplate = t("حفظ كقالب", "Save as template")
     val templateName = t("اسم القالب", "Template name")
     val templateSaved = t("حُفظ القالب", "Template saved")
@@ -282,7 +301,7 @@ class Strings(val isArabic: Boolean) {
     val samsungNotes = "Samsung Notes"
     val xiaomiNotes = t("ملاحظات Xiaomi", "Xiaomi Notes")
     val huaweiNotepad = t("مفكرة Huawei", "Huawei Notepad")
-    val otherFiles = t("ملفات أخرى وGoogle Keep", "Other files & Google Keep")
+    val otherFiles = t("ملفات أخرى و Google Keep", "Other files & Google Keep")
     val samsungSteps = t(
         "في Samsung Notes: حدّد الملاحظات ← مشاركة ← اختر «ملف Microsoft Word» أو «PDF» أو «ملف نصي» أو «صورة» ← احفظها أو شاركها مباشرة مع Notea. الكتابة اليدوية تُحفظ كملف PDF/صورة أصلية.",
         "In Samsung Notes: select notes → Share → choose Microsoft Word, PDF, Text or Image → save them or share directly to Notea. Handwriting is kept as the original PDF/image."
@@ -296,7 +315,7 @@ class Strings(val isArabic: Boolean) {
         "In Huawei Notepad: select notes → Share/Export as TXT, HTML or image, or export a ZIP. Handwritten notes are imported as images or PDF, keeping available dates."
     )
     val otherSteps = t(
-        "يدعم: TXT وMarkdown وHTML وDOCX وPDF وPNG/JPG وJSON وZIP (ومنها تصدير Google Takeout لـ Keep).",
+        "يدعم: TXT و Markdown و HTML و DOCX و PDF و PNG/JPG و JSON و ZIP (ومنها تصدير Google Takeout لـ Keep).",
         "Supports TXT, Markdown, HTML, DOCX, PDF, PNG/JPG, JSON and ZIP (including Google Takeout exports of Keep)."
     )
     val chooseFiles = t("اختيار الملفات", "Choose files")
@@ -369,6 +388,103 @@ class Strings(val isArabic: Boolean) {
     val tplProject = t("خطة مشروع", "Project plan")
 
     // Sharing
+    // Migration center / onboarding
+    val migrationCenter = t("مركز الترحيل", "Move your notes here")
+    val migrationCenterDesc = t("انقل ملاحظاتك من هاتفك السابق أو تطبيق آخر", "Bring notes from your previous phone or another app")
+    val welcomeTitle = t("أهلاً بك في Notea", "Welcome to Notea")
+    val welcomeBody = t("هل لديك ملاحظات على هاتف سابق أو في تطبيق آخر؟ انقلها الآن؛ سترى معاينة وعدد الملاحظات والمرفقات قبل إضافة أي شيء.", "Have notes on a previous phone or in another app? Bring them now — you'll see a preview with note and attachment counts before anything is added.")
+    val fromOtherPhone = t("من هاتف آخر عليه Notea", "From another phone with Notea")
+    val fromOtherPhoneDesc = t("عبر نفس شبكة Wi-Fi، دون إنترنت ودون حساب", "Over the same Wi-Fi — no internet or account needed")
+    val fromApps = t("من Samsung أو Xiaomi أو Huawei أو Google Keep", "From Samsung, Xiaomi, Huawei or Google Keep")
+    val fromAppsDesc = t("ملفات TXT و DOCX و PDF والصور و HTML و ZIP", "TXT, DOCX, PDF, images, HTML and ZIP files")
+    val fromBackupFile = t("من ملف نسخة احتياطية", "From a backup file")
+    val fromBackupFileDesc = t("ملف بصيغة notea من هذا التطبيق", "A notea backup file from this app")
+    val startFresh = t("ابدأ من جديد", "Start fresh")
+    val transferTitle = t("النقل بين هاتفين", "Phone to phone")
+    val transferIntro = t("صِل الهاتفين بنفس شبكة Wi-Fi، أو فعّل نقطة الاتصال في أحدهما واتصل بها من الآخر. لا حاجة للإنترنت، والنقل مشفّر بالرمز المؤقت.", "Connect both phones to the same Wi-Fi, or turn on a hotspot on one and join it from the other. No internet needed; the transfer is encrypted with the one-time code.")
+    val sendFromThis = t("إرسال من هذا الهاتف (القديم)", "Send from this phone (old)")
+    val receiveOnThis = t("استقبال على هذا الهاتف (الجديد)", "Receive on this phone (new)")
+    val preparingTransfer = t("جارٍ تجهيز ملاحظاتك للنقل…", "Preparing your notes…")
+    val scanOnNewPhone = t("على الهاتف الجديد: افتح «استقبال» وامسح هذا الرمز، أو اكتب العنوان والرمز.", "On the new phone: open “Receive” and scan this code, or type the address and code.")
+    val transferAddress = t("العنوان", "Address")
+    val transferCode = t("الرمز", "Code")
+    val waitingForPhone = t("بانتظار الهاتف الجديد… أبقِ هذه الشاشة مفتوحة.", "Waiting for the new phone… keep this screen open.")
+    val sending = t("جارٍ الإرسال", "Sending")
+    val receiving = t("جارٍ الاستقبال", "Receiving")
+    val transferDone = t("اكتمل الإرسال. يمكنك المتابعة على الهاتف الجديد.", "Sent. Continue on the new phone.")
+    val transferFailed = t("تعذّر النقل. تأكد أن الهاتفين على الشبكة نفسها وأن الرمز صحيح.", "Transfer failed. Make sure both phones are on the same network and the code is correct.")
+    val noWifi = t("لا يوجد اتصال Wi-Fi أو نقطة اتصال. صِل الهاتفين بالشبكة نفسها.", "No Wi-Fi or hotspot connection. Connect both phones to the same network.")
+    val scanQr = t("مسح رمز QR", "Scan QR code")
+    val enterManually = t("أو أدخل العنوان والرمز يدوياً", "Or enter the address and code")
+    val connect = t("اتصال", "Connect")
+    val invalidTransferCode = t("العنوان أو الرمز غير صحيح", "Invalid address or code")
+    val scannerUnavailable = t("ماسح الرموز غير متاح على هذا الجهاز؛ أدخل الرمز يدوياً.", "QR scanner isn't available on this device; enter the code manually.")
+
+    // Memory
+    val fromMemory = t("من ذاكرتك", "From your memory")
+    val memOnThisDay = { years: Int -> t("في مثل هذا اليوم قبل ${num(years)} ${if (years == 1) "سنة" else "سنوات"}", "On this day, $years year${if (years == 1) "" else "s"} ago") }
+    val memDecision = t("قرار سجّلته سابقاً — هل ما زال سببه قائماً؟", "A decision you recorded — does the reason still hold?")
+    val memOutdated = t("فيها مهام لم تُنجز وتواريخ مضت — قد تحتاج مراجعة", "Unfinished tasks with past dates — may need a review")
+    val memForgotten = t("ملاحظة مهمة لم تفتحها منذ مدة", "An important note you haven't opened in a while")
+    val open = t("فتح", "Open")
+    val hideToday = t("إخفاء", "Hide")
+    val relatedNotes = t("ملاحظات مرتبطة", "Related notes")
+    val sharedWords = { w: String -> t("كلمات مشتركة: $w", "Shared words: $w") }
+    val compareWithAssistant = t("مقارنة بالمساعد", "Compare with assistant")
+    val tplDecision = t("قرار", "Decision")
+
+    // Assistant
+    val assistant = t("المساعد الذكي", "AI assistant")
+    val assistantDesc = t("تلخيص، استخراج المهام، خطة عمل — بمفتاح Gemini الخاص بك", "Summary, tasks, action plan — with your own Gemini key")
+    val assistantIntro = t(
+        "يعمل المساعد بمفتاح Gemini الخاص بك: يتصل هاتفك بـ Google مباشرة، ولا يمر أي شيء عبرنا. الحدود والتكلفة حسب خطة حسابك (المجانية أو المدفوعة). لا يُرسل إلا الملاحظة التي تختارها وبعد موافقتك، ولا تُرسل الملاحظات المقفلة أبداً.",
+        "The assistant uses your own Gemini key: your phone talks to Google directly, nothing goes through us. Limits and cost follow your account's plan (free or paid). Only the note you choose is sent, after you confirm; locked notes are never sent."
+    )
+    val enableAssistant = t("تفعيل المساعد", "Enable assistant")
+    val keyStep1 = t("١. احصل على مفتاح مجاني من Google (تحتاج حساب Gmail فقط)", "1. Get a free key from Google (just a Gmail account)")
+    val getFreeKey = t("فتح صفحة المفاتيح", "Open the key page")
+    val keyStep2 = t("٢. اضغط «Create API key» ثم انسخ المفتاح", "2. Tap “Create API key” and copy it")
+    val keyStep3 = t("٣. الصقه هنا واضغط «اختبار وحفظ»", "3. Paste it here and tap “Test & save”")
+    val apiKey = t("مفتاح Gemini", "Gemini key")
+    val paste = t("لصق", "Paste")
+    val testAndSave = t("اختبار وحفظ", "Test & save")
+    val keyWorks = t("✓ المفتاح يعمل", "✓ The key works")
+    val keySaved = t("المفتاح محفوظ ومشفّر على هذا الجهاز فقط", "Key saved, encrypted, on this device only")
+    val removeKey = t("حذف المفتاح", "Remove key")
+    val modelInUse = { m: String -> t("النموذج: $m", "Model: $m") }
+    val askBeforeSending = t("اسألني قبل كل إرسال", "Ask me before every send")
+    val freeTierNote = t("تنبيه: في الخطة المجانية قد تستخدم Google ما يُرسل لتحسين خدماتها. لا ترسل معلومات حساسة.", "Note: on the free plan Google may use what you send to improve its services. Don't send sensitive information.")
+    val errInvalidKey = t("المفتاح غير صحيح أو غير مفعّل", "The key is invalid or not enabled")
+    val errRegion = t("خدمة Gemini غير متاحة في بلدك حالياً. بقية التطبيق يعمل كالمعتاد.", "Gemini isn't available in your country. The rest of the app works as usual.")
+    val errQuota = t("انتهت الحصة المتاحة حالياً حسب خطة حسابك. حاول لاحقاً.", "Your plan's current quota is used up. Try again later.")
+    val errOffline = t("لا يوجد اتصال بالإنترنت", "No internet connection")
+    val errBlocked = t("لم يُرجع المساعد نتيجة لهذه الملاحظة", "The assistant returned no result for this note")
+    val errGeneric = t("حدث خطأ غير متوقع", "Something went wrong")
+    val actSummary = t("تلخيص", "Summarize")
+    val actSummaryDesc = t("ملخص قصير وأهم النقاط", "A short summary and key points")
+    val actTasks = t("استخراج المهام", "Extract tasks")
+    val actTasksDesc = t("تحويل ما يجب فعله إلى قائمة مهام", "Turn to-dos into a checklist")
+    val actPlan = t("خطة عمل", "Action plan")
+    val actPlanDesc = t("خطوات مرتبة وواضحة من محتوى الملاحظة", "Clear ordered steps from the note")
+    val consentTitle = t("إرسال إلى Google Gemini؟", "Send to Google Gemini?")
+    val consentBody = { chars: Int, truncated: Boolean -> t(
+        "سيُرسل عنوان هذه الملاحظة ونصها (${num(chars)} حرف${if (truncated) "، مقتطع لأول ١٢٬٠٠٠ حرف" else ""}) إلى Google لمعالجتها. لن تُرسل المرفقات ولا الملاحظات الأخرى.",
+        "This note's title and text ($chars characters${if (truncated) ", truncated to the first 12,000" else ""}) will be sent to Google for processing. Attachments and other notes are not sent.") }
+    val consentCompareBody = t("سيُرسل نص الملاحظتين المختارتين فقط إلى Google لمقارنتهما.", "Only the text of the two selected notes will be sent to Google to compare them.")
+    val dontAskAgain = t("لا تسألني مجدداً على هذا الجهاز", "Don't ask again on this device")
+    val send = t("إرسال", "Send")
+    val thinking = t("جارٍ التحليل…", "Working…")
+    val insertAtTop = t("إدراج في بداية الملاحظة", "Insert at the top")
+    val addAsChecklist = t("إضافة كقائمة مهام", "Add as checklist")
+    val insertPlan = t("إدراج الخطة في الملاحظة", "Insert plan into note")
+    val summaryLabel = t("الملخص", "Summary")
+    val planLabel = t("الخطة", "Plan")
+    val goalLabel = t("الهدف", "Goal")
+    val dueLabel = { d: String -> t("موعد: $d", "due: $d") }
+    val noTasksFound = t("لم يجد المساعد مهاماً واضحة في هذه الملاحظة", "No clear tasks were found in this note")
+    val contradictions = t("تعارضات محتملة", "Possible contradictions")
+    val outdatedInfo = t("معلومات قد تكون قديمة", "Possibly outdated information")
+    val nothingFound = t("لم يُعثر على شيء يُذكر", "Nothing notable found")
     val sharedNoteCreated = t("أُنشئت ملاحظة من المحتوى المشترك", "Created a note from shared content")
 
     // Widget

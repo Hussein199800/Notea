@@ -18,3 +18,9 @@
 6. Owner may `get` a not-yet-existing document (pre-write conflict check).
 
 Tests: `firestore.test.js` (10 emulator tests) and `SyncEmulatorTest` (end-to-end sync, conflict, ciphertext-only uploads).
+
+## Additional data flows (v1.1)
+- **OCR** runs fully on device (Tesseract). OCR text is stored unencrypted for search, so it is never produced for locked notes and is erased when a note gets locked.
+- **AI assistant** (optional, off by default): the user's own Gemini API key is stored wrapped by Android Keystore (`notea_ai`, excluded from backups) and sent only as the `x-goog-api-key` header to `generativelanguage.googleapis.com`. Each request requires consent (unless the user opted out of the prompt), sends one note (or two for "compare"), max 12,000 characters. Locked notes are never sent.
+- **Phone-to-phone transfer**: LAN-only TCP; the file is a `.notea` backup encrypted with the 12-character one-time code (AES-256-GCM, PBKDF2); the code is shown only on the sender's screen; 5 wrong codes stop the server.
+- **Link previews / Gemini** are the only network calls besides Firebase (when configured).

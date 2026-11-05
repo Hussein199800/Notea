@@ -19,3 +19,10 @@
 - Developer identity shown in About / Settings signature: حسين الطويل — Hussein Taweel (GitHub Hussein199800). Keep the Seal-style About page.
 - Release signing comes only from `keystore.properties` (gitignored) or `NOTEA_KEYSTORE_PATH` / `NOTEA_KEYSTORE_PASSWORD` / `NOTEA_KEY_ALIAS` / `NOTEA_KEY_PASSWORD`. Never commit `*.jks` or passwords.
 - Firebase is optional: without `app/google-services.json` the app runs in on-device mode (`LOCAL_UID`). With it, sign-in + sync appear and `AccountLinker` moves on-device notes into the account.
+
+## Features & constraints added in v1.1
+- Notes are ordered **blocks** (`note_blocks`, schema v3): text / checklist / attachment. `notes.body` = text blocks joined by a blank line (canonical for search, sync, previews). Locked notes keep the layout only inside the encrypted payload. A note without block rows uses the classic layout.
+- Images: `ImageNormalizer` (HEIC/AVIF -> JPEG, TIFF via `TiffDecoder` -> PNG/JPEG, unsupported kept as file). OCR is on-device Tesseract (ara+eng) in `OcrWorker`; never stores OCR text for locked notes.
+- Versions: named versions (label) are never trimmed; diff via `TextDiff`.
+- Phone-to-phone transfer: raw TCP on the LAN, payload is a password-encrypted backup, the one-time code is the password.
+- AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, one note per request, input capped at 12k chars; no whole-library AI features (token cost). Notea Memory is on-device (no AI).

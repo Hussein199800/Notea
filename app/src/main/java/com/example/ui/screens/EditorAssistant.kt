@@ -1,0 +1,216 @@
+package com.example.ui.screens
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Notes
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CheckBox
+import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
+import androidx.compose.material.icons.rounded.CompareArrows
+import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
+import com.example.core.ai.AiError
+import com.example.core.ai.NoteAssistant
+import com.example.ui.components.ExpandableText
+import com.example.ui.i18n.LocalStrings
+import com.example.ui.i18n.Strings
+import com.example.ui.viewmodel.AssistantUi
+import com.example.ui.viewmodel.EditorViewModel
+
+fun Strings.aiError(e: Throwable): String = when (e) {
+    is AiError.InvalidKey -> errInvalidKey
+    is AiError.RegionUnsupported -> errRegion
+    is AiError.Quota -> errQuota
+    is AiError.Offline -> errOffline
+    is AiError.Blocked -> errBlocked
+    else -> errGeneric
+}
+
+/** Confirmation before anything leaves the device. */
+@Composable
+fun ConsentDialog(body: String, onSend: (remember: Boolean) -> Unit, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
+    var remember by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.AutoAwesome, null) },
+        title = { Text(s.consentTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ExpandableText(body, collapsedLines = 6)
+                ExpandableText(s.freeTierNote, collapsedLines = 3, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { remember = !remember }) {
+                    Checkbox(remember, { remember = it }); Text(s.dontAskAgain, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSend(remember); onDismiss() }) { Text(s.send) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AssistantSheet(vm: EditorViewModel, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
+    val clipboard = LocalClipboardManager.current
+    val ui by vm.assistant.collectAsState()
+    var pending by remember { mutableStateOf<NoteAssistant.Action?>(null) }
+    fun start(a: NoteAssistant.Action) { if (vm.needsConsent()) pending = a else vm.runAssistant(a, false) }
+
+    ModalBottomSheet(onDismissRequest = { vm.dismissAssistant(); onDismiss() }) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).heightIn(max = 640.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(8.dp))
+                Text(s.assistant, style = MaterialTheme.typography.titleLarge)
+            }
+            when (val st = ui) {
+                AssistantUi.Idle -> {
+                    ActionRow(Icons.AutoMirrored.Rounded.Notes, s.actSummary, s.actSummaryDesc) { start(NoteAssistant.Action.SUMMARY) }
+                    ActionRow(Icons.Rounded.TaskAlt, s.actTasks, s.actTasksDesc) { start(NoteAssistant.Action.TASKS) }
+                    ActionRow(Icons.Rounded.Route, s.actPlan, s.actPlanDesc) { start(NoteAssistant.Action.PLAN) }
+                }
+                AssistantUi.Loading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 24.dp)) {
+                    CircularProgressIndicator(Modifier.size(28.dp)); Spacer(Modifier.width(16.dp)); Text(s.thinking)
+                }
+                is AssistantUi.SummaryResult -> {
+                    Text(s.summaryLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    ExpandableText(st.value.summary, collapsedLines = 8, style = MaterialTheme.typography.bodyLarge)
+                    st.value.points.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { vm.insertSummary(s.summaryLabel, st.value); onDismiss() }) { Text(s.insertAtTop) }
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(st.value.summary + st.value.points.joinToString("") { "\n• $it" })) }) { Text(s.copy) }
+                    }
+                }
+                is AssistantUi.TasksResult -> {
+                    if (st.tasks.isEmpty()) Text(s.noTasksFound)
+                    else {
+                        val chosen = remember(st) { mutableStateListOf(*st.tasks.indices.toList().toTypedArray()) }
+                        st.tasks.forEachIndexed { i, t ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { if (i in chosen) chosen.remove(i) else chosen.add(i) }) {
+                                Icon(if (i in chosen) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                    Text(t.text, style = MaterialTheme.typography.bodyLarge)
+                                    t.due?.let { Text(s.dueLabel(it), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                }
+                            }
+                        }
+                        Button(enabled = chosen.isNotEmpty(), onClick = {
+                            vm.addTasks(chosen.sorted().map { i -> st.tasks[i].let { t -> t.text + (t.due?.let { " — $it" } ?: "") } }); onDismiss()
+                        }) { Text(s.addAsChecklist) }
+                    }
+                }
+                is AssistantUi.PlanResult -> {
+                    if (st.plan.goal.isNotBlank()) { Text(s.goalLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary); Text(st.plan.goal) }
+                    st.plan.steps.forEachIndexed { i, step -> Text("${s.num(i + 1)}. $step", style = MaterialTheme.typography.bodyLarge) }
+                    Button(onClick = { vm.insertPlan(s.planLabel, s.goalLabel, st.plan); onDismiss() }) { Text(s.insertPlan) }
+                }
+                is AssistantUi.CompareResult -> {
+                    Text(st.otherTitle, style = MaterialTheme.typography.titleMedium)
+                    if (st.value.note.isNotBlank()) ExpandableText(st.value.note, collapsedLines = 4)
+                    if (st.value.contradictions.isEmpty() && st.value.outdated.isEmpty()) Text(s.nothingFound)
+                    if (st.value.contradictions.isNotEmpty()) {
+                        Text(s.contradictions, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+                        st.value.contradictions.forEach { Text("• $it") }
+                    }
+                    if (st.value.outdated.isNotEmpty()) {
+                        Text(s.outdatedInfo, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                        st.value.outdated.forEach { Text("• $it") }
+                    }
+                }
+                is AssistantUi.Failed -> {
+                    ExpandableText(s.aiError(st.error), collapsedLines = 4, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { vm.dismissAssistant() }) { Text(s.back) }
+                }
+            }
+        }
+    }
+    pending?.let { a ->
+        val (text, truncated) = vm.assistantPayload()
+        ConsentDialog(s.consentBody(text.length, truncated), onSend = { remember -> vm.runAssistant(a, remember) }) { pending = null }
+    }
+}
+
+@Composable
+private fun ActionRow(icon: ImageVector, title: String, desc: String, onClick: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Notea Memory inside a note: related notes computed on the device. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RelatedNotesSection(vm: EditorViewModel, onOpen: (String) -> Unit, onCompare: ((String) -> Unit)?) {
+    val s = LocalStrings.current
+    val related by vm.related.collectAsState()
+    if (related.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Hub, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.width(6.dp))
+            Text(s.relatedNotes, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        related.forEach { r ->
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
+                modifier = Modifier.fillMaxWidth().clickable { onOpen(r.id) }) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(r.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleSmall)
+                    if (r.sharedWords.isNotEmpty()) Text(s.sharedWords(r.sharedWords.joinToString("، ")), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (onCompare != null) TextButton(onClick = { onCompare(r.id) }) {
+                        Icon(Icons.Rounded.CompareArrows, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(s.compareWithAssistant)
+                    }
+                }
+            }
+        }
+    }
+}

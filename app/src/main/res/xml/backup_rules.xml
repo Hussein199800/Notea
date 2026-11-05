@@ -3,5 +3,6 @@
      useless elsewhere, so it is excluded; locked notes are restored via the vault passphrase. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="notea_vault.xml" />
+    <exclude domain="sharedpref" path="notea_ai.xml" />
     <exclude domain="file" path="backups/" />
 </full-backup-content>

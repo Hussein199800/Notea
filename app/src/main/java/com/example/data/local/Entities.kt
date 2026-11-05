@@ -157,6 +157,8 @@ object RevisionReason {
     const val BEFORE_RESTORE = "before_restore"
     const val CONFLICT = "conflict"
     const val IMPORT_MERGE = "import_merge"
+    const val NAMED = "named"
+    const val ASSISTANT = "assistant"
 }
 
 @Entity(

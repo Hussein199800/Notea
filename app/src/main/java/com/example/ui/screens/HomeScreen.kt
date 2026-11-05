@@ -42,6 +42,8 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notes
 import androidx.compose.material.icons.rounded.Notifications
@@ -115,18 +117,20 @@ import com.example.ui.viewmodel.Screen
 import com.example.ui.viewmodel.SessionViewModel
 import kotlinx.coroutines.launch
 
-data class BuiltInTemplate(val name: String, val title: String, val body: String, val checklist: List<String>)
+data class BuiltInTemplate(val name: String, val title: String, val body: String, val checklist: List<String>, val tags: List<String> = emptyList())
 
 fun builtInTemplates(s: Strings): List<BuiltInTemplate> = if (s.isArabic) listOf(
     BuiltInTemplate(s.tplMeeting, "اجتماع: ", "**التاريخ:** \n**الحضور:** \n\n## جدول الأعمال\n- \n\n## القرارات\n- ", listOf("متابعة المهام")),
     BuiltInTemplate(s.tplDaily, "يوميات", "## ما الذي أنجزته اليوم؟\n- \n\n## ما الذي أشكر عليه؟\n- \n\n## أولويات الغد\n1. ", emptyList()),
     BuiltInTemplate(s.tplShopping, "قائمة تسوق", "", listOf("خبز", "حليب", "خضار")),
-    BuiltInTemplate(s.tplProject, "مشروع: ", "## الهدف\n\n## المراحل\n1. \n\n## الموارد\n- ", listOf("تحديد النطاق", "الخطة الزمنية"))
+    BuiltInTemplate(s.tplProject, "مشروع: ", "## الهدف\n\n## المراحل\n1. \n\n## الموارد\n- ", listOf("تحديد النطاق", "الخطة الزمنية")),
+    BuiltInTemplate(s.tplDecision, "قرار: ", "## القرار\n\n## لماذا؟\n- \n\n## البدائل التي استبعدتها\n- \n\n## متى أراجعه؟\n", emptyList(), listOf("قرار"))
 ) else listOf(
     BuiltInTemplate(s.tplMeeting, "Meeting: ", "**Date:** \n**Attendees:** \n\n## Agenda\n- \n\n## Decisions\n- ", listOf("Follow-ups")),
     BuiltInTemplate(s.tplDaily, "Journal", "## What did I get done today?\n- \n\n## Grateful for\n- \n\n## Tomorrow's priorities\n1. ", emptyList()),
     BuiltInTemplate(s.tplShopping, "Shopping list", "", listOf("Bread", "Milk", "Vegetables")),
-    BuiltInTemplate(s.tplProject, "Project: ", "## Goal\n\n## Milestones\n1. \n\n## Resources\n- ", listOf("Define scope", "Timeline"))
+    BuiltInTemplate(s.tplProject, "Project: ", "## Goal\n\n## Milestones\n1. \n\n## Resources\n- ", listOf("Define scope", "Timeline")),
+    BuiltInTemplate(s.tplDecision, "Decision: ", "## Decision\n\n## Why?\n- \n\n## Alternatives I ruled out\n- \n\n## When to review\n", emptyList(), listOf("decision"))
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -139,6 +143,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
     val folders by vm.folders.collectAsState()
     val tags by vm.tags.collectAsState()
     val prefs by session.prefs.collectAsState()
+    val memory by vm.memory.collectAsState()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -292,6 +297,11 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalItemSpacing = 10.dp,
                         modifier = Modifier.fillMaxSize()
                     ) {
+                        if (memory != null && filter.view == HomeView.ALL && !filter.isSearching && filter.folderId == null && filter.tagId == null) {
+                            item(span = StaggeredGridItemSpan.FullLine, key = "memory") {
+                                MemoryCard(memory!!, onOpen = { onOpenNote(memory!!.noteId, false) }, onHide = { vm.dismissMemory(memory!!.noteId) })
+                            }
+                        }
                         if (state.pinned.isNotEmpty()) {
                             item(span = StaggeredGridItemSpan.FullLine) { Header(s.pinned) }
                             items(state.pinned, key = { it.note.id }) { m ->
@@ -308,6 +318,10 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
             if (filter.view != HomeView.TRASH && filter.view != HomeView.ARCHIVE) {
                 Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SmallFloatingActionButton(onClick = { vm.createNote({ NoteDraft(id = it) }) { id -> session.navigate(Screen.Editor(id, isNew = true, startScan = true)) } },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                        Icon(Icons.Rounded.DocumentScanner, s.scanDocument)
+                    }
                     SmallFloatingActionButton(onClick = { showTemplates = true }, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
                         Icon(Icons.Rounded.ViewQuilt, s.fromTemplate)
                     }
@@ -368,7 +382,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                 items(builtInTemplates(s)) { t ->
                     SheetRow(Icons.Rounded.ViewQuilt, t.name) {
                         showTemplates = false
-                        vm.createNote({ id -> NoteDraft(id = id, title = t.title, body = t.body, checklist = t.checklist.map { ChecklistDraft(text = it) }) }) { onOpenNote(it, true) }
+                        vm.createNote({ id -> NoteDraft(id = id, title = t.title, body = t.body, checklist = t.checklist.map { ChecklistDraft(text = it) }, tags = t.tags) }) { onOpenNote(it, true) }
                     }
                 }
                 item { Text(s.yours, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(20.dp, 8.dp)) }
@@ -448,5 +462,35 @@ fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(18.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Notea Memory: one quiet suggestion, dismissible for today. */
+@Composable
+private fun MemoryCard(m: com.example.core.memory.NoteMemory.Resurface, onOpen: () -> Unit, onHide: () -> Unit) {
+    val s = LocalStrings.current
+    val reason = when (m.reason) {
+        com.example.core.memory.NoteMemory.Reason.ON_THIS_DAY -> s.memOnThisDay(m.yearsAgo)
+        com.example.core.memory.NoteMemory.Reason.DECISION -> s.memDecision
+        com.example.core.memory.NoteMemory.Reason.MAYBE_OUTDATED -> s.memOutdated
+        com.example.core.memory.NoteMemory.Reason.FORGOTTEN -> s.memForgotten
+    }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Lightbulb, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(6.dp))
+                Text(s.fromMemory, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+            }
+            Text(reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(m.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleMedium)
+            if (m.preview.isNotBlank()) com.example.ui.components.ExpandableText(m.preview, collapsedLines = 2, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row {
+                TextButton(onClick = onOpen) { Text(s.open) }
+                TextButton(onClick = onHide) { Text(s.hideToday) }
+            }
+        }
     }
 }

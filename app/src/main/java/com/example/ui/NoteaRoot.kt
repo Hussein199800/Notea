@@ -139,6 +139,7 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
         onDispose { lifecycle.lifecycle.removeObserver(obs) }
     }
     LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(session) { session.maybeShowWelcome() }
 
     // Share sheet / widget / notification entry points.
     LaunchedEffect(incoming) {
@@ -205,6 +206,9 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     Screen.ImportPreview -> ImportPreviewScreen(session, data)
                     Screen.Backup -> BackupScreen(session, data)
                     Screen.About -> com.example.ui.screens.AboutScreen { session.back() }
+                    is Screen.Welcome -> com.example.ui.screens.WelcomeScreen(session, screen.firstRun) { session.markOnboarded(); session.back() }
+                    Screen.Transfer -> com.example.ui.screens.TransferScreen(session, data)
+                    Screen.AssistantSettings -> com.example.ui.screens.AssistantSettingsScreen(session)
                 }
             }
         }
@@ -220,7 +224,7 @@ private fun EditorHost(container: AppContainer, session: SessionViewModel, uid: 
     val vm: EditorViewModel = viewModel(viewModelStoreOwner = owner, key = "editor-${screen.noteId}", factory = viewModelFactory {
         initializer { EditorViewModel(container, uid, screen.noteId) }
     })
-    EditorScreen(session, vm, folders) { session.back() }
+    EditorScreen(session, vm, folders, startScan = screen.startScan, onOpenNote = { id -> session.navigate(Screen.Editor(id)) }) { session.back() }
 }
 
 /**

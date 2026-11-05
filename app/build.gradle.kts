@@ -17,14 +17,13 @@ android {
     applicationId = "com.notea.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = 2
+    versionName = "1.1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    // Native OCR libraries: phones (arm) + x86_64 emulators only, to keep the APK small.
-    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+    // Native OCR libraries for phones only (arm). x86_64 (emulators) is added to debug builds.
+    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
   }
-  androidResources { noCompress += listOf("traineddata") }
 
   // Release signing: the keystore is NEVER committed. Provide it via keystore.properties
   // (gitignored, see keystore.properties.example) or NOTEA_* environment variables (CI).
@@ -52,6 +51,7 @@ android {
       signingConfig = signingConfigs.findByName("release")
     }
     debug {
+      ndk { abiFilters += listOf("x86_64") }
       applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
     }

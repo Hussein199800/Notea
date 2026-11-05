@@ -87,4 +87,24 @@ class SyncEmulatorTest : FirestoreEmulatorTestBase() {
         val content = doc.getString("content")!!
         assertTrue(NoteCipher.isV2(content)); assertFalse(doc.data.toString().contains("PLAINTEXT-SECRET"))
     }
+
+    @Test fun blockLayout_syncsWithoutDuplicatingText() = runBlocking {
+        val uid = signInTestUser("blocks-${System.nanoTime()}@example.com")
+        val a = Device("BA"); val b = Device("BB")
+        val layout = listOf(
+            com.example.data.repository.BlockDraft("t1", com.example.data.local.BlockType.TEXT, "مقدمة"),
+            com.example.data.repository.BlockDraft("c1", com.example.data.local.BlockType.CHECKLIST),
+            com.example.data.repository.BlockDraft("t2", com.example.data.local.BlockType.TEXT, "خاتمة")
+        )
+        a.repo.save(uid, NoteDraft(id = "blocks1", title = "كتل", blocks = layout,
+            checklist = listOf(com.example.data.repository.ChecklistDraft(text = "بند", blockId = "c1"))))
+        assertTrue(withContext(Dispatchers.IO) { a.engine.pushAll(uid) })
+        val doc = withContext(Dispatchers.IO) { firestore.collection("users").document(uid).collection("notes").document("blocks1").get().await() }
+        assertEquals("مقدمة\n\nخاتمة", doc.getString("content"))
+        assertFalse(doc.get("blocks").toString().contains("مقدمة")) // layout only, text lives in content
+        b.pull(uid, "blocks1")
+        val onB = b.db.noteDao().getNoteWithDetails("blocks1")!!
+        assertEquals(listOf("t1", "c1", "t2"), onB.blocks.sortedBy { it.position }.map { it.id })
+        assertEquals("c1", onB.checklist.single().blockId)
+    }
 }

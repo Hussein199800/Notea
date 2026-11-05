@@ -16,17 +16,18 @@ import java.io.File
 class OcrEngine(private val context: Context) {
     private val dataDir: File get() = File(context.filesDir, "tesseract")
 
-    /** Copies the bundled models once (Tesseract needs real files). */
+    /** Copies the bundled (compressed) models once per model version (Tesseract needs real files). */
     private fun ensureModels() {
         val dir = File(dataDir, "tessdata").apply { mkdirs() }
+        val marker = File(dir, "models.version")
+        if (marker.exists() && marker.readText() == MODEL_VERSION && LANGS.all { File(dir, "$it.traineddata").length() > 0 }) return
         for (lang in LANGS) {
             val f = File(dir, "$lang.traineddata")
-            val asset = "tessdata/$lang.traineddata"
-            val size = context.assets.openFd(asset).use { it.length }
-            if (!f.exists() || f.length() != size) {
-                context.assets.open(asset).use { i -> f.outputStream().use { i.copyTo(it) } }
-            }
+            val tmp = File(dir, "$lang.tmp")
+            context.assets.open("tessdata/$lang.traineddata").use { i -> tmp.outputStream().use { i.copyTo(it) } }
+            if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
         }
+        marker.writeText(MODEL_VERSION)
     }
 
     /** OCR of one bitmap. Returns cleaned text (may be empty). */
@@ -75,6 +76,8 @@ class OcrEngine(private val context: Context) {
 
     companion object {
         val LANGS = listOf("ara", "eng")
+        /** Bump when the bundled models change. */
+        const val MODEL_VERSION = "tessdata_fast-4.1"
 
         fun clean(raw: String): String = raw.lines()
             .map { it.trim() }

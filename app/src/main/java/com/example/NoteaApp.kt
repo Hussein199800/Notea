@@ -89,6 +89,22 @@ class AppContainer(val app: Application) {
 
     fun syncAvailable(uid: String) = firebaseAvailable && uid != LOCAL_UID
 
+    val aiKeys by lazy { com.example.core.ai.AiKeyStore(app) }
+    val assistant by lazy { com.example.core.ai.NoteAssistant(com.example.core.ai.GeminiClient(), aiKeys) }
+
+    /** Assistant is offered only when the user enabled it and saved a key. */
+    fun assistantReady() = aiKeys.enabled && aiKeys.hasKey()
+
+    @Volatile private var memoryCache: Pair<Long, com.example.core.memory.NoteMemory.Index>? = null
+
+    /** Related-notes index, rebuilt only when notes changed (cheap: on-device, no network). */
+    suspend fun memoryIndex(uid: String): com.example.core.memory.NoteMemory.Index {
+        val notes = db.noteDao().getAllWithDetails(uid)
+        val stamp = notes.size * 31L + (notes.maxOfOrNull { it.note.updatedAt } ?: 0L) + notes.sumOf { n -> n.attachments.sumOf { it.extractedText.length.toLong() } }
+        memoryCache?.let { if (it.first == stamp) return it.second }
+        return com.example.core.memory.NoteMemory.buildIndex(notes).also { memoryCache = stamp to it }
+    }
+
     val accountLinker by lazy { com.example.data.repository.AccountLinker(this) }
 
     fun isArabic(): Boolean = when (settings.state.value.language) {

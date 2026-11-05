@@ -141,7 +141,8 @@ object TiffDecoder {
             out.write(entry)
             if (prev != null) dict.add(prev + entry[0])
             prev = entry
-            width = when { dict.size + 1 >= 2047 -> 12; dict.size + 1 >= 1023 -> 11; dict.size + 1 >= 511 -> 10; else -> 9 }
+            // TIFF "early change": widen one code before the table is full (libtiff semantics).
+            width = when { dict.size >= 2047 -> 12; dict.size >= 1023 -> 11; dict.size >= 511 -> 10; else -> 9 }
         }
         return out.toByteArray()
     }

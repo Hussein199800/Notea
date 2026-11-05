@@ -76,7 +76,8 @@ fun AboutScreen(onBack: () -> Unit) {
             SectionLabel(s.credits)
             PreferenceGroup {
                 PreferenceRow(Icons.Rounded.FontDownload, s.fontCredit, "IBM Plex Sans Arabic · SIL Open Font License")
-                PreferenceRow(Icons.Rounded.Widgets, s.libsCredit, "Jetpack Compose · Room · WorkManager · Glance · Coil · Firebase")
+                PreferenceRow(Icons.Rounded.FontDownload, s.aiCredit, "tessdata_fast · ara + eng")
+                PreferenceRow(Icons.Rounded.Widgets, s.libsCredit, "Jetpack Compose · Room · WorkManager · Glance · Coil · ZXing · Tesseract4Android · ML Kit · Firebase")
             }
             DeveloperSignature(Modifier.padding(top = 28.dp, bottom = 8.dp))
         }

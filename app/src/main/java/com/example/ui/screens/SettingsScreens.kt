@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.DarkMode
@@ -189,7 +190,9 @@ fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> U
         item {
             SectionLabel(s.dataSection)
             PreferenceGroup {
+                PreferenceRow(Icons.Rounded.PhoneAndroid, s.migrationCenter, s.migrationCenterDesc, onClick = { session.navigate(Screen.Welcome(firstRun = false)) })
                 PreferenceRow(Icons.Rounded.Download, s.importCenter, s.importCenterDesc, onClick = { session.navigate(Screen.ImportCenter) })
+                PreferenceRow(Icons.Rounded.AutoAwesome, s.assistant, s.assistantDesc, onClick = { session.navigate(Screen.AssistantSettings) })
                 PreferenceRow(Icons.Rounded.Backup, s.backupRestore, s.backupRestoreDesc, onClick = { session.navigate(Screen.Backup) })
                 if (session.online) PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (pending > 0) s.syncPending(pending) else s.syncUpToDate) {
                     TextButton(onClick = { session.syncNow() }) { Text(s.syncNow) }

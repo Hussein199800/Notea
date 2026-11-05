@@ -143,6 +143,16 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
         return ts >= from
     }
 
+    private val today get() = java.text.SimpleDateFormat("yyyyDDD", java.util.Locale.US).format(java.util.Date())
+    private val dismissTick = MutableStateFlow(0)
+
+    /** Notea Memory suggestion for today (on-device; null when there's nothing worth showing). */
+    val memory: StateFlow<com.example.core.memory.NoteMemory.Resurface?> = combine(repo.observeNotes(uid), dismissTick) { notes, _ ->
+        com.example.core.memory.NoteMemory.resurface(notes, System.currentTimeMillis(), container.settings.dismissedMemory(today))
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun dismissMemory(id: String) { container.settings.dismissMemory(today, id); dismissTick.value++ }
+
     fun setFilter(change: (HomeFilter) -> HomeFilter) { _filter.value = change(_filter.value) }
     fun showView(v: HomeView) { _filter.value = HomeFilter(view = v) }
     fun showFolder(id: String?) { _filter.value = HomeFilter(folderId = id) }

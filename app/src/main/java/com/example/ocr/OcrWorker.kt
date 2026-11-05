@@ -31,7 +31,8 @@ class OcrWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
                 else -> ""
             }
         } catch (e: Throwable) {
-            return if (runAttemptCount < 2) Result.retry() else Result.success()
+            if (runAttemptCount < 2) return Result.retry()
+            "" // give up: mark as done without text
         }
         c.repository.setExtractedText(a.id, text.ifBlank { NO_TEXT })
         return Result.success()

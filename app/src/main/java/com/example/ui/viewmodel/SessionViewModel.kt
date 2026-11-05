@@ -21,12 +21,15 @@ import kotlinx.coroutines.withContext
 
 sealed interface Screen {
     data object Home : Screen
-    data class Editor(val noteId: String, val isNew: Boolean = false) : Screen
+    data class Editor(val noteId: String, val isNew: Boolean = false, val startScan: Boolean = false) : Screen
     data object Settings : Screen
     data object ImportCenter : Screen
     data object ImportPreview : Screen
     data object Backup : Screen
     data object About : Screen
+    data class Welcome(val firstRun: Boolean) : Screen
+    data object Transfer : Screen
+    data object AssistantSettings : Screen
 }
 
 /** Shared incoming content from Android share sheet / widgets / notifications. */
@@ -246,6 +249,16 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
     }
 
     private fun vaultNeedsOnlineMsg() = if (container.isArabic()) "يلزم اتصال بالإنترنت لإنشاء الخزنة أول مرة" else "An internet connection is needed to create the vault the first time"
+
+    fun markOnboarded() = settings.setOnboardingDone(uid)
+
+    /** First run on this account with no notes yet: open the migration center once. */
+    fun maybeShowWelcome() = viewModelScope.launch(Dispatchers.IO) {
+        if (settings.onboardingDone(uid)) return@launch
+        if (container.db.noteDao().getAllWithDetails(uid).isEmpty()) {
+            kotlinx.coroutines.withContext(Dispatchers.Main) { if (_stack.value == listOf(Screen.Home)) navigate(Screen.Welcome(firstRun = true)) }
+        } else settings.setOnboardingDone(uid)
+    }
 
     fun syncNow() { if (online) SyncWorker.enqueue(container.app, uid, 0) }
 

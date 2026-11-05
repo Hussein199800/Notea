@@ -49,6 +49,8 @@ import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatItalic
@@ -157,7 +159,8 @@ import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<com.example.data.local.FolderEntity>, onClose: () -> Unit) {
+fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<com.example.data.local.FolderEntity>, startScan: Boolean = false,
+                 onOpenNote: (String) -> Unit = {}, onClose: () -> Unit) {
     val s = LocalStrings.current
     val context = LocalContext.current
     val st by vm.state.collectAsState()
@@ -165,6 +168,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     val scope = rememberCoroutineScope()
 
     var menu by remember { mutableStateOf(false) }
+    var compareTarget by remember { mutableStateOf<String?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) } // color, folder, tags, reminder, history
     var linkDialog by remember { mutableStateOf(false) }
     var templateDialog by remember { mutableStateOf(false) }
@@ -201,6 +205,38 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
         uris.forEach { vm.addAttachmentFromUri(it, AttachmentKind.IMAGE) }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { vm.addAttachmentFromUri(it) } }
+    // Document scanner (edge detection + perspective fix, on device via Google Play services);
+    // falls back to the system camera on devices without Play services.
+    val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) cameraUri.value?.let { vm.addAttachmentFromUri(it, AttachmentKind.IMAGE) }
+    }
+    val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == android.app.Activity.RESULT_OK) {
+            com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages
+                ?.forEach { vm.addAttachmentFromUri(it.imageUri, AttachmentKind.IMAGE) }
+        }
+    }
+    fun launchCamera() {
+        val f = java.io.File(context.cacheDir, "camera/scan_${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
+        cameraUri.value = uri
+        runCatching { takePicture.launch(uri) }.onFailure { session.message(s.noAppToOpen) }
+    }
+    fun startScan() {
+        val activity = context.findActivity()
+        if (activity == null) { launchCamera(); return }
+        val options = com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true).setPageLimit(20)
+            .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL).build()
+        runCatching {
+            com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+                .addOnSuccessListener { scanLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
+                .addOnFailureListener { launchCamera() }
+        }.onFailure { launchCamera() }
+    }
+    LaunchedEffect(startScan, st.loading) { if (startScan && !st.loading) startScan() }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { recording = recorder.start(); recordSeconds = 0 } else session.message(s.micPermission)
     }
@@ -249,12 +285,13 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 if (st.isLocked) confirmUnlock = true
                                 else if (vaultState != VaultState.READY) vaultDialog = true else pinDialog = true
                             }
+                            if (vm.assistantAvailable) MenuItem(Icons.Rounded.AutoAwesome, s.assistant) { sheet = "assistant"; menu = false }
                             MenuItem(Icons.Rounded.History, s.history) { sheet = "history"; menu = false }
                             MenuItem(Icons.Rounded.ViewQuilt, s.saveAsTemplate) { templateDialog = true; menu = false }
                             if (!st.isLocked) MenuItem(Icons.Rounded.Share, s.share) {
                                 menu = false
                                 val text = buildString {
-                                    append(MarkdownEngine.plain(st.body.text))
+                                    append(MarkdownEngine.plain(st.bodyText))
                                     st.checklist.forEach { append("\n").append(if (it.checked) "☑ " else "☐ ").append(it.text) }
                                 }
                                 FileOpener.shareText(context, st.title, (st.title + "\n\n" + text).trim())
@@ -302,34 +339,10 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                         }
                     )
                     MetaLine(st, folders)
-                    val palette = MarkdownEngine.Palette(
-                        marker = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                        link = MaterialTheme.colorScheme.primary,
-                        quote = MaterialTheme.colorScheme.onSurfaceVariant,
-                        accent = MaterialTheme.colorScheme.secondary
-                    )
-                    val transformation = remember(palette) { MarkdownEngine.Transformation(palette) }
-                    BasicTextField(
-                        value = st.body, onValueChange = vm::setBody, readOnly = readOnly,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        visualTransformation = transformation,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        decorationBox = { inner ->
-                            Box(Modifier.fillMaxWidth()) {
-                                if (st.body.text.isEmpty()) Text(s.bodyHint, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                inner()
-                            }
-                        }
-                    )
-                    val url = MarkdownEngine.urlAt(st.body.text, st.body.selection.start)
-                    AnimatedVisibility(url != null) {
-                        AssistChip(onClick = { url?.let { FileOpener.openUrl(context, it) } }, label = { Text(url.orEmpty(), modifier = Modifier.padding(vertical = 6.dp)) },
-                            leadingIcon = { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp)) })
-                    }
-                    if (st.checklist.isNotEmpty()) ChecklistSection(vm, st.checklist, readOnly)
-                    if (st.attachments.isNotEmpty()) AttachmentsSection(vm, st.attachments, readOnly)
+                    BlocksContent(vm, st, readOnly)
+                    LaunchedEffect(st.loading, st.persisted) { if (!st.loading && st.persisted) vm.refreshRelated() }
+                    RelatedNotesSection(vm, onOpen = { id -> vm.flush(); onOpenNote(id) },
+                        onCompare = if (com.example.ui.screens.assistantOn(vm)) { id -> if (vm.needsConsent()) compareTarget = id else { vm.compareWith(id, false); sheet = "assistant" } } else null)
                     if (recording) {
                         Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -356,17 +369,18 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                         .horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Tool(Icons.Rounded.CheckBox, s.checklist) { vm.convertToChecklist() }
-                    Tool(Icons.Rounded.FormatBold, s.bold) { vm.applyBody { MarkdownEngine.toggleInline(it, "**") } }
-                    Tool(Icons.Rounded.FormatItalic, s.italic) { vm.applyBody { MarkdownEngine.toggleInline(it, "*") } }
-                    Tool(Icons.Rounded.FormatUnderlined, s.underline) { vm.applyBody { MarkdownEngine.toggleInline(it, "++") } }
-                    Tool(Icons.Rounded.Title, s.heading) { vm.applyBody { MarkdownEngine.toggleLinePrefix(it, "## ") } }
-                    Tool(Icons.AutoMirrored.Rounded.FormatListBulleted, s.bullets) { vm.applyBody { MarkdownEngine.toggleLinePrefix(it, "- ") } }
-                    Tool(Icons.Rounded.FormatListNumbered, s.numbered) { vm.applyBody { MarkdownEngine.toggleLinePrefix(it, "1. ") } }
-                    Tool(Icons.Rounded.FormatQuote, s.quote) { vm.applyBody { MarkdownEngine.toggleLinePrefix(it, "> ") } }
+                    Tool(Icons.Rounded.CheckBox, s.checklist) { vm.insertChecklist() }
+                    Tool(Icons.Rounded.FormatBold, s.bold) { vm.applyFormat { MarkdownEngine.toggleInline(it, "**") } }
+                    Tool(Icons.Rounded.FormatItalic, s.italic) { vm.applyFormat { MarkdownEngine.toggleInline(it, "*") } }
+                    Tool(Icons.Rounded.FormatUnderlined, s.underline) { vm.applyFormat { MarkdownEngine.toggleInline(it, "++") } }
+                    Tool(Icons.Rounded.Title, s.heading) { vm.applyFormat { MarkdownEngine.toggleLinePrefix(it, "## ") } }
+                    Tool(Icons.AutoMirrored.Rounded.FormatListBulleted, s.bullets) { vm.applyFormat { MarkdownEngine.toggleLinePrefix(it, "- ") } }
+                    Tool(Icons.Rounded.FormatListNumbered, s.numbered) { vm.applyFormat { MarkdownEngine.toggleLinePrefix(it, "1. ") } }
+                    Tool(Icons.Rounded.FormatQuote, s.quote) { vm.applyFormat { MarkdownEngine.toggleLinePrefix(it, "> ") } }
                     Tool(Icons.Rounded.Link, s.link) { linkDialog = true }
                     Box(Modifier.height(24.dp).width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
                     Tool(Icons.Rounded.Image, s.image) { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    Tool(Icons.Rounded.DocumentScanner, s.scanDocument) { startScan() }
                     Tool(Icons.Rounded.AttachFile, s.file) { pickFile.launch(arrayOf("*/*")) }
                     Tool(if (recording) Icons.Rounded.Stop else Icons.Rounded.Mic, if (recording) s.stopRecording else s.record) { toggleRecord() }
                     Tool(Icons.Rounded.Palette, s.color) { sheet = "color" }
@@ -401,7 +415,8 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                 if (st.reminderAt != null) SheetRow(Icons.Rounded.Close, s.removeReminder) { vm.setReminder(null); sheet = null }
             }
         }
-        "history" -> HistorySheet(vm) { sheet = null }
+        "history" -> VersionHistorySheet(vm) { sheet = null }
+        "assistant" -> AssistantSheet(vm) { sheet = null }
     }
     if (datePicker) {
         val dp = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
@@ -421,13 +436,16 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
             }) { Text(s.save) } },
             dismissButton = { TextButton(onClick = { timePickerFor = null }) { Text(s.cancel) } })
     }
-    if (linkDialog) LinkDialog(onDismiss = { linkDialog = false }, onInsert = { u, t -> vm.applyBody { MarkdownEngine.insertLink(it, u, t) } },
+    if (linkDialog) LinkDialog(onDismiss = { linkDialog = false }, onInsert = { u, t -> vm.applyFormat { MarkdownEngine.insertLink(it, u, t) } },
         onCard = { u ->
             scope.launch {
                 val p = withContext(Dispatchers.IO) { LinkPreviewFetcher.fetch(u) }
                 vm.addLinkCard(u, p?.title.orEmpty(), p?.description.orEmpty())
             }
         })
+    compareTarget?.let { id ->
+        ConsentDialog(s.consentCompareBody, onSend = { remember -> vm.compareWith(id, remember); sheet = "assistant" }) { compareTarget = null }
+    }
     if (templateDialog) TextInputDialog(s.saveAsTemplate, s.templateName, st.title, s.save, { vm.saveAsTemplate(it); session.message(s.templateSaved) }) { templateDialog = false }
     if (pinDialog) SetPinDialog(s.lockNote, withHint = true, onSet = { pin, hint ->
         scope.launch { val h = withContext(Dispatchers.Default) { PinHasher.hash(pin) }; vm.lock(h, hint); session.markOpened(vm.noteId) }
@@ -465,95 +483,6 @@ private fun MetaLine(st: com.example.ui.viewmodel.EditorState, folders: List<com
         st.reminderAt?.let { com.example.ui.components.MetaPill(Icons.Rounded.Notifications, s.date(it)) }
         st.tags.forEach { com.example.ui.components.MetaPill(null, "#$it") }
     }
-}
-
-@Composable
-private fun ChecklistSection(vm: EditorViewModel, items: List<com.example.data.repository.ChecklistDraft>, readOnly: Boolean) {
-    val s = LocalStrings.current
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(s.completedItems(items.count { it.checked }, items.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        (items.filter { !it.checked } + items.filter { it.checked }).forEach { item ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { vm.toggleChecklistItem(item.id) }, enabled = !readOnly) {
-                    Icon(if (item.checked) Icons.Rounded.CheckBox else Icons.Rounded.CheckBoxOutlineBlank, null, tint = MaterialTheme.colorScheme.primary)
-                }
-                BasicTextField(
-                    value = item.text, onValueChange = { vm.updateChecklistItem(item.id, it) }, readOnly = readOnly,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.checked) 0.5f else 1f),
-                        textDecoration = if (item.checked) TextDecoration.LineThrough else null
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { vm.addChecklistItem() }),
-                    modifier = Modifier.weight(1f),
-                    decorationBox = { inner -> if (item.text.isEmpty()) Text(s.itemHint, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)); inner() }
-                )
-                if (!readOnly) IconButton(onClick = { vm.removeChecklistItem(item.id) }) { Icon(Icons.Rounded.Close, s.delete, Modifier.size(18.dp)) }
-            }
-        }
-        if (!readOnly) TextButton(onClick = { vm.addChecklistItem() }) {
-            Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(s.addItem)
-        }
-    }
-}
-
-@Composable
-private fun AttachmentsSection(vm: EditorViewModel, items: List<AttachmentEntity>, readOnly: Boolean) {
-    val s = LocalStrings.current
-    val context = LocalContext.current
-    var confirmRemove by remember { mutableStateOf<AttachmentEntity?>(null) }
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(s.attachments, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val images = items.filter { it.kind == AttachmentKind.IMAGE }
-        if (images.isNotEmpty()) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                images.forEach { a ->
-                    val file by produceState<java.io.File?>(null, a.id) { value = withContext(Dispatchers.IO) { vm.viewableFile(a) } }
-                    Box {
-                        AsyncImage(file, a.displayName, contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(140.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { file?.let { if (!FileOpener.open(context, it, a.mimeType)) android.widget.Toast.makeText(context, s.noAppToOpen, android.widget.Toast.LENGTH_SHORT).show() } })
-                        if (!readOnly) IconButton(onClick = { confirmRemove = a }, modifier = Modifier.align(Alignment.TopEnd).size(32.dp)) {
-                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)) { Icon(Icons.Rounded.Close, s.removeAttachment, Modifier.padding(4.dp).size(16.dp)) }
-                        }
-                    }
-                }
-            }
-        }
-        items.filter { it.kind != AttachmentKind.IMAGE }.forEach { a ->
-            var playing by remember(a.id) { mutableStateOf(false) }
-            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.clickable {
-                    when (a.kind) {
-                        AttachmentKind.LINK -> FileOpener.openUrl(context, a.url)
-                        AttachmentKind.AUDIO -> vm.viewableFile(a)?.let { f -> AudioPlayer.toggle(f) { playing = it } }
-                        else -> { val f = vm.viewableFile(a); if (f == null || !FileOpener.open(context, f, a.mimeType)) android.widget.Toast.makeText(context, s.noAppToOpen, android.widget.Toast.LENGTH_SHORT).show() }
-                    }
-                }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(when (a.kind) {
-                        AttachmentKind.AUDIO -> if (playing) Icons.Rounded.Stop else Icons.Rounded.PlayArrow
-                        AttachmentKind.PDF -> Icons.Rounded.PictureAsPdf
-                        AttachmentKind.LINK -> Icons.Rounded.Link
-                        else -> Icons.Rounded.Description
-                    }, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(if (a.kind == AttachmentKind.LINK) a.linkTitle.ifBlank { a.url } else a.displayName, style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium)
-                        val sub = when (a.kind) {
-                            AttachmentKind.LINK -> a.linkDescription.ifBlank { a.url }
-                            AttachmentKind.AUDIO -> "%d:%02d".format(a.durationMs / 60000, (a.durationMs / 1000) % 60)
-                            else -> android.text.format.Formatter.formatShortFileSize(context, a.sizeBytes)
-                        }
-                        com.example.ui.components.ExpandableText(sub, collapsedLines = 3, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (!readOnly) IconButton(onClick = { confirmRemove = a }) { Icon(Icons.Rounded.Close, s.removeAttachment, Modifier.size(18.dp)) }
-                }
-            }
-        }
-    }
-    confirmRemove?.let { a -> ConfirmDialog(s.removeAttachment, a.displayName, s.delete, true, { vm.removeAttachment(a.id) }) { confirmRemove = null } }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -594,45 +523,11 @@ private fun LinkDialog(onDismiss: () -> Unit, onInsert: (String, String) -> Unit
     }, dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } })
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HistorySheet(vm: EditorViewModel, onDismiss: () -> Unit) {
-    val s = LocalStrings.current
-    val revisions by vm.revisions.collectAsState(initial = emptyList())
-    var selected by remember { mutableStateOf<com.example.data.local.RevisionEntity?>(null) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        if (selected == null) {
-            LazyColumn(Modifier.padding(bottom = 24.dp)) {
-                item { Text(s.history, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp, 8.dp)) }
-                if (revisions.isEmpty()) item { Text(s.noHistory, Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(revisions, key = { it.id }) { r ->
-                    SheetRow(Icons.Rounded.History, s.date(r.createdAt) + " • " + when (r.reason) {
-                        RevisionReason.CONFLICT -> s.reasonConflict; RevisionReason.BEFORE_RESTORE -> s.reasonBeforeRestore
-                        RevisionReason.IMPORT_MERGE -> s.reasonMerge; else -> s.reasonAuto
-                    }) { selected = r }
-                }
-            }
-        } else {
-            val r = selected!!
-            val dec = remember(r.id) { vm.decryptRevision(r) }
-            Column(Modifier.padding(20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(s.date(r.createdAt), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                Text(r.title.ifBlank { s.untitled }, style = MaterialTheme.typography.titleLarge)
-                when (dec) {
-                    is DecryptResult.Plain -> {
-                        com.example.ui.components.ExpandableText(MarkdownEngine.plain(dec.body), collapsedLines = 14, style = MaterialTheme.typography.bodyMedium)
-                        dec.checklist.forEach { Text((if (it.checked) "☑ " else "☐ ") + it.text, style = MaterialTheme.typography.bodySmall) }
-                        Row {
-                            TextButton(onClick = { selected = null }) { Text(s.back) }
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { vm.restoreRevision(r) { onDismiss() } }) {
-                                Icon(Icons.Rounded.Restore, null); Spacer(Modifier.width(6.dp)); Text(s.restoreVersion)
-                            }
-                        }
-                    }
-                    else -> { Text(s.vaultNeedsUnlock); TextButton(onClick = { selected = null }) { Text(s.back) } }
-                }
-            }
-        }
-    }
+private fun android.content.Context.findActivity(): android.app.Activity? {
+    var c = this
+    while (c is android.content.ContextWrapper) { if (c is android.app.Activity) return c; c = c.baseContext }
+    return null
 }
+
+/** Compare is offered only when the assistant is set up and the note is not locked. */
+fun assistantOn(vm: EditorViewModel) = vm.assistantAvailable
