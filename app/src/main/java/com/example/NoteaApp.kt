@@ -26,14 +26,25 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class NoteaApp : Application(), coil.ImageLoaderFactory {
+open class NoteaApp : Application(), coil.ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
     override fun onCreate() {
         super.onCreate()
+        // The isolated OCR helper process (":ocr") must not start the app's database, sync or jobs.
+        if (isHelperProcess()) return
+        com.example.core.CrashReporter.install(this)
         container = AppContainer(this)
         container.onAppStart()
+    }
+
+    private fun isHelperProcess(): Boolean {
+        val name = if (android.os.Build.VERSION.SDK_INT >= 28) getProcessName() else runCatching {
+            val pid = android.os.Process.myPid()
+            (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+        }.getOrNull()
+        return name?.endsWith(":ocr") == true
     }
 
     /** Images: animated GIF/WebP (ImageDecoder on 28+, GifDecoder before) and SVG everywhere. */

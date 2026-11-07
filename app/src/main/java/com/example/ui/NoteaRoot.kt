@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -92,6 +93,7 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
     NoteaTheme(dark) {
         CompositionLocalProvider(LocalStrings provides strings, LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                CrashReportDialog()
                 val u = user
                 val signIn: (() -> Unit)? = if (auth != null) ({ setLocal(false) }) else null
                 when {
@@ -280,4 +282,33 @@ private fun LinkLocalData(container: AppContainer, uid: String, content: @Compos
 private fun LinkToast(msg: String) {
     val ctx = LocalContext.current
     androidx.compose.runtime.LaunchedEffect(msg) { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
+}
+
+/** Shows the reason of the last unexpected close once, with a share button. */
+@Composable
+private fun CrashReportDialog() {
+    val s = LocalStrings.current
+    val ctx = LocalContext.current
+    var report by remember { mutableStateOf(com.example.core.CrashReporter.pending(ctx)) }
+    val r = report ?: return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { com.example.core.CrashReporter.markSeen(ctx); report = null },
+        title = { Text(s.crashTitle) },
+        text = {
+            androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                com.example.ui.components.ExpandableText(s.crashBody, collapsedLines = 4)
+                androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    com.example.ui.components.ExpandableText(r, collapsedLines = 8, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                com.example.ui.platform.FileOpener.shareText(ctx, "Notea crash report", r)
+                com.example.core.CrashReporter.markSeen(ctx); report = null
+            }) { Text(s.shareReport) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { com.example.core.CrashReporter.markSeen(ctx); report = null }) { Text(s.close) } }
+    )
 }

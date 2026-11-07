@@ -193,6 +193,12 @@ fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> U
                 PreferenceRow(Icons.Rounded.PhoneAndroid, s.migrationCenter, s.migrationCenterDesc, onClick = { session.navigate(Screen.Welcome(firstRun = false)) })
                 PreferenceRow(Icons.Rounded.Download, s.importCenter, s.importCenterDesc, onClick = { session.navigate(Screen.ImportCenter) })
                 PreferenceRow(Icons.Rounded.AutoAwesome, s.assistant, s.assistantDesc, onClick = { session.navigate(Screen.AssistantSettings) })
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                var ocrOn by remember { mutableStateOf(!com.example.ocr.OcrGuard.disabled(ctx)) }
+                val paused = !ocrOn && com.example.ocr.OcrGuard.crashCount(ctx) >= 2
+                SwitchRow(Icons.Rounded.Download, s.ocrSetting, if (paused) s.ocrPausedDesc else s.ocrSettingDesc, ocrOn) { on ->
+                    com.example.ocr.OcrGuard.setEnabled(ctx, on); ocrOn = on
+                }
                 PreferenceRow(Icons.Rounded.Backup, s.backupRestore, s.backupRestoreDesc, onClick = { session.navigate(Screen.Backup) })
                 if (session.online) PreferenceRow(Icons.Rounded.CloudSync, s.sync, if (pending > 0) s.syncPending(pending) else s.syncUpToDate) {
                     TextButton(onClick = { session.syncNow() }) { Text(s.syncNow) }

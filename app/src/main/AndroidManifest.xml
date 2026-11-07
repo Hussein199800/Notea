@@ -66,6 +66,9 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Native OCR runs isolated: a crash there can't close Notea. -->
+        <service android:name=".ocr.OcrService" android:process=":ocr" android:exported="false" />
+
         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
         <receiver android:name=".reminders.BootReceiver" android:exported="true">
             <intent-filter>

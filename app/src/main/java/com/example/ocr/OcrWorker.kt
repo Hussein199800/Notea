@@ -23,16 +23,16 @@ class OcrWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
         if (note.isLocked || a.encrypted || a.localPath.isBlank() || a.extractedText.isNotBlank()) return Result.success()
         val file = c.attachmentStore.file(a.userId, a.localPath)
         if (!file.exists()) return Result.success()
-        val engine = OcrEngine(applicationContext)
-        val text = try {
-            when {
-                a.kind == AttachmentKind.IMAGE && a.mimeType != "image/svg+xml" -> engine.recognizeImageFile(file)
-                a.kind == AttachmentKind.PDF -> engine.recognizePdf(file)
-                else -> ""
+        if (OcrGuard.disabled(applicationContext)) return Result.success()
+        val pdf = a.kind == AttachmentKind.PDF
+        if (!pdf && (a.kind != AttachmentKind.IMAGE || a.mimeType == "image/svg+xml")) return Result.success()
+        val text = when (val r = OcrService.recognize(applicationContext, file, pdf)) {
+            is OcrService.Companion.Outcome.Text -> r.value
+            OcrService.Companion.Outcome.Crashed -> {
+                // The engine crashed on this file: never retry it, and pause OCR after repeated crashes.
+                OcrGuard.recordCrash(applicationContext)
+                ""
             }
-        } catch (e: Throwable) {
-            if (runAttemptCount < 2) return Result.retry()
-            "" // give up: mark as done without text
         }
         c.repository.setExtractedText(a.id, text.ifBlank { NO_TEXT })
         return Result.success()
@@ -48,4 +48,16 @@ class OcrWorker(context: Context, params: WorkerParameters) : CoroutineWorker(co
             WorkManager.getInstance(context).enqueueUniqueWork("ocr-$attachmentId", ExistingWorkPolicy.KEEP, req)
         }
     }
+}
+
+/** Remembers native OCR crashes on this phone; after 2 the feature pauses (user can re-enable). */
+object OcrGuard {
+    private fun prefs(c: Context) = c.getSharedPreferences("notea_ocr", Context.MODE_PRIVATE)
+    fun disabled(c: Context) = prefs(c).getBoolean("disabled", false)
+    fun crashCount(c: Context) = prefs(c).getInt("crashes", 0)
+    fun recordCrash(c: Context) {
+        val n = crashCount(c) + 1
+        prefs(c).edit().putInt("crashes", n).putBoolean("disabled", n >= 2).commit()
+    }
+    fun setEnabled(c: Context, on: Boolean) { prefs(c).edit().putBoolean("disabled", !on).putInt("crashes", 0).apply() }
 }
