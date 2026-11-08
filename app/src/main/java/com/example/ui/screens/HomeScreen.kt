@@ -405,25 +405,25 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 val close = { actionsFor = null }
                 if (m.note.trashedAt != null) {
-                    SheetRow(Icons.Rounded.Restore, s.restore) { vm.restore(m.note.id); close() }
-                    SheetRow(Icons.Rounded.DeleteForever, s.deleteForever) { confirmDelete = true }
+                    SheetRow(Icons.Rounded.Restore, s.restore, com.example.ui.theme.Concept.NOTES.g2) { vm.restore(m.note.id); close() }
+                    SheetRow(Icons.Rounded.DeleteForever, s.deleteForever, com.example.ui.theme.Concept.TRASH.t2) { confirmDelete = true }
                 } else {
-                    SheetRow(Icons.Rounded.PushPin, if (m.note.isPinned) s.unpin else s.pin) { vm.togglePin(m); close() }
-                    SheetRow(if (m.note.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (m.note.isFavorite) s.unfavorite else s.favorite) { vm.toggleFavorite(m); close() }
-                    SheetRow(Icons.Rounded.Palette, s.color) { colorMode = !colorMode }
+                    SheetRow(Icons.Rounded.PushPin, if (m.note.isPinned) s.unpin else s.pin, com.example.ui.theme.Concept.SECURITY.g2) { vm.togglePin(m); close() }
+                    SheetRow(if (m.note.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (m.note.isFavorite) s.unfavorite else s.favorite, com.example.ui.theme.Concept.TASKS.g2) { vm.toggleFavorite(m); close() }
+                    SheetRow(Icons.Rounded.Palette, s.color, com.example.ui.theme.Concept.ASSISTANT.g2) { colorMode = !colorMode }
                     AnimatedVisibility(colorMode) { Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { ColorPicker(m.note.colorIndex) { vm.setColor(m.note.id, it); close() } } }
-                    SheetRow(Icons.Rounded.Folder, s.moveToFolder) { folderMode = !folderMode }
+                    SheetRow(Icons.Rounded.Folder, s.moveToFolder, com.example.ui.theme.Concept.FOLDERS.g2) { folderMode = !folderMode }
                     AnimatedVisibility(folderMode) {
                         FlowRow(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(m.note.folderId == null, onClick = { vm.moveToFolder(m.note.id, null); close() }, label = { Text(s.noFolder) })
                             folders.forEach { f -> FilterChip(m.note.folderId == f.id, onClick = { vm.moveToFolder(m.note.id, f.id); close() }, label = { Text(f.name) }) }
                         }
                     }
-                    if (!m.note.isLocked) SheetRow(Icons.Rounded.Share, s.share) {
+                    if (!m.note.isLocked) SheetRow(Icons.Rounded.Share, s.share, com.example.ui.theme.Concept.REMINDERS.g2) {
                         vm.plainTextForShare(m.details)?.let { FileOpener.shareText(context, m.note.title, it) }; close()
                     }
-                    SheetRow(if (m.note.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (m.note.isArchived) s.unarchive else s.archiveAction) { vm.toggleArchive(m); close() }
-                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash) { val id = m.note.id; vm.trash(id); session.messageWithUndo(s.movedToTrash) { vm.restore(id) }; close() }
+                    SheetRow(if (m.note.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (m.note.isArchived) s.unarchive else s.archiveAction, com.example.ui.theme.Concept.ARCHIVE.g2) { vm.toggleArchive(m); close() }
+                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash, com.example.ui.theme.Concept.TRASH.g2) { val id = m.note.id; vm.trash(id); session.messageWithUndo(s.movedToTrash) { vm.restore(id) }; close() }
                 }
             }
         }
@@ -437,12 +437,12 @@ private fun Header(text: String) {
 }
 
 @Composable
-fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+fun SheetRow(icon: ImageVector, label: String, tint: androidx.compose.ui.graphics.Color? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, null, tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(18.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
@@ -496,13 +496,13 @@ private fun SelectionBar(
           }
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             if (inTrash) {
-                IconButton(onClick = onRestore) { Icon(Icons.Rounded.Restore, s.restore) }
-                IconButton(onClick = onDeleteForever) { Icon(Icons.Rounded.DeleteForever, s.deleteForever, tint = MaterialTheme.colorScheme.error) }
+                IconButton(onClick = onRestore) { Icon(Icons.Rounded.Restore, s.restore, tint = com.example.ui.theme.Concept.NOTES.g2) }
+                IconButton(onClick = onDeleteForever) { Icon(Icons.Rounded.DeleteForever, s.deleteForever, tint = com.example.ui.theme.Concept.TRASH.t2) }
             } else {
-                IconButton(onClick = onPin) { Icon(Icons.Rounded.PushPin, if (allPinned) s.unpin else s.pin, tint = if (allPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
-                IconButton(onClick = onFavorite) { Icon(if (allFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (allFavorite) s.unfavorite else s.favorite) }
-                IconButton(onClick = onArchive) { Icon(if (allArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (allArchived) s.unarchive else s.archiveAction) }
-                IconButton(onClick = onTrash) { Icon(Icons.Rounded.DeleteOutline, s.moveToTrash) }
+                IconButton(onClick = onPin) { Icon(Icons.Rounded.PushPin, if (allPinned) s.unpin else s.pin, tint = com.example.ui.theme.Concept.SECURITY.g2) }
+                IconButton(onClick = onFavorite) { Icon(if (allFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (allFavorite) s.unfavorite else s.favorite, tint = com.example.ui.theme.Concept.TASKS.g2) }
+                IconButton(onClick = onArchive) { Icon(if (allArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (allArchived) s.unarchive else s.archiveAction, tint = com.example.ui.theme.Concept.ARCHIVE.g2) }
+                IconButton(onClick = onTrash) { Icon(Icons.Rounded.DeleteOutline, s.moveToTrash, tint = com.example.ui.theme.Concept.TRASH.g2) }
                 if (onMore != null) IconButton(onClick = onMore) { Icon(Icons.Rounded.MoreVert, s.more) }
             }
           }

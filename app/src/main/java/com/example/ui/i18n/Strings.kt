@@ -320,8 +320,8 @@ class Strings(val isArabic: Boolean) {
     val huaweiNotepad = t("مفكرة Huawei", "Huawei Notepad")
     val otherFiles = t("ملفات أخرى و Google Keep", "Other files & Google Keep")
     val samsungSteps = t(
-        "في Samsung Notes: حدّد الملاحظات ← مشاركة ← اختر «ملف Microsoft Word» أو «PDF» أو «ملف نصي» أو «صورة» ← احفظها أو شاركها مباشرة مع Notea. الكتابة اليدوية تُحفظ كملف PDF/صورة أصلية.",
-        "In Samsung Notes: select notes → Share → choose Microsoft Word, PDF, Text or Image → save them or share directly to Notea. Handwriting is kept as the original PDF/image."
+        "اختر ملفات Samsung Notes بصيغة sdocx مباشرة (من «ملفاتي» أو نسخة Smart Switch)، فيستورد Notea النص والصور منها. للحفاظ على التنسيق أفضل: في Samsung Notes حدّد الملاحظات ← مشاركة ← «ملف Microsoft Word» أو «PDF» ← Notea. الكتابة اليدوية تُحفظ كصورة أو PDF.",
+        "Pick Samsung Notes files (sdocx) directly (from My Files or a Smart Switch copy); Notea imports their text and images. To keep formatting best: in Samsung Notes select notes → Share → Microsoft Word or PDF → Notea. Handwriting is kept as an image or PDF."
     )
     val xiaomiSteps = t(
         "في ملاحظات Xiaomi: افتح الملاحظة ← مشاركة ← «نص» ← Notea. يمكن مشاركة عدة ملاحظات أو ملفات TXT دفعة واحدة. إن لم يتوفر تصدير جماعي، استخدم «لصق نص» أدناه.",
@@ -619,6 +619,33 @@ class Strings(val isArabic: Boolean) {
     val scanOptGalleryDesc = t("صورة ممسوحة مسبقاً أو لقطة شاشة", "An already scanned image or a screenshot")
     val installingScanner = { p: Int -> t("جارٍ تثبيت ماسح Google… ${num(p)}٪", "Installing Google's scanner… $p%") }
     val googleScannerUnavailable = t("تعذّر تثبيت ماسح Google على هذا الهاتف (لا توجد خدمات Google أو لا اتصال). استخدم كاميرا الهاتف بوضع المستندات.", "Couldn't install Google's scanner on this phone (no Google services or no connection). Use the phone camera's document mode.")
+
+    // Notion-style
+    val insideNote = { t: String -> t("داخل: ${t.trim()}", "In: ${t.trim()}") }
+    val subNotes = t("الملاحظات الفرعية", "Sub-notes")
+    val subNotesCount = { n: Int -> if (isArabic) countAr(n, "ملاحظة فرعية واحدة", "ملاحظتان فرعيتان", "ملاحظات فرعية", "ملاحظة فرعية") else if (n == 1) "1 sub-note" else "$n sub-notes" }
+    val newSubNote = t("ملاحظة فرعية", "Sub-note")
+    val linksFromNote = t("روابط في هذه الملاحظة", "Links in this note")
+    val backlinks = t("ملاحظات تشير إلى هذه", "Notes linking here")
+    val createNoteNamed = { n: String -> t("إنشاء «${n}»", "Create “$n”") }
+    val toggleBlock = t("كتلة قابلة للطي", "Toggle")
+    val calloutBlock = t("تنبيه", "Callout")
+    val toggleHint = t("عنوان الكتلة… (السطر الأول)", "Toggle heading… (first line)")
+    val calloutHint = t("اكتب معلومة مهمة…", "Write something important…")
+    val collapse = t("طي", "Collapse")
+    val expand = t("فتح", "Expand")
+    val linkToNote = t("رابط لملاحظة", "Link to note")
+    val insertBlock = t("إدراج", "Insert")
+    val noMatches = t("لا نتائج", "No matches")
+    val noteIcon = t("أيقونة الملاحظة", "Note icon")
+    val removeIcon = t("إزالة الأيقونة", "Remove icon")
+    val addIcon = t("إضافة أيقونة", "Add icon")
+    val moveUnderNote = t("نقل داخل ملاحظة", "Move into a note")
+    val moveToTop = t("إخراج إلى المستوى الأعلى", "Move to top level")
+    val pickParent = t("اختر الملاحظة الأم", "Choose the parent note")
+    val movedUnder = t("نُقلت الملاحظة", "Note moved")
+    val cantMoveUnder = t("لا يمكن نقل ملاحظة داخل إحدى ملاحظاتها الفرعية.", "A note can't go inside one of its own sub-notes.")
+    val slashHint = t("اكتب / في بداية السطر لقائمة الإدراج، و [[ لربط ملاحظة", "Type / at the start of a line for the insert menu, [[ to link a note")
 
     // Main tabs
     val tabNotes = t("الملاحظات", "Notes")

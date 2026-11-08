@@ -35,6 +35,9 @@ import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.AssistChip
@@ -102,7 +105,11 @@ fun BlocksContent(vm: EditorViewModel, st: EditorState, readOnly: Boolean) {
             val canUp = index > 0
             val canDown = index < st.blocks.lastIndex
             when (block) {
-                is EditorBlock.Text -> {
+                is EditorBlock.Text -> if (block.kind != com.example.data.local.BlockType.TEXT) {
+                    BlockFrame(readOnly, canUp, canDown, onMove = { vm.moveBlock(block.id, it) }, onRemove = { vm.removeBlock(block.id) }) {
+                        SpecialTextBlock(vm, block, st.focusedBlockId == block.id, readOnly, palette)
+                    }
+                } else {
                     val transformation = remember(palette, block.id) { MarkdownEngine.Transformation(palette) }
                     BasicTextField(
                         value = block.value, onValueChange = { vm.setText(block.id, it) }, readOnly = readOnly,
@@ -304,6 +311,50 @@ private fun OcrPanel(vm: EditorViewModel, a: AttachmentEntity, blockId: String, 
                     if (!readOnly) TextButton(onClick = { vm.insertTextAfter(blockId, text) }) { Text(s.insertIntoNote) }
                     PreciseButton()
                 }
+            }
+        }
+    }
+}
+
+/** Toggle (first line = heading, the rest folds away) and callout (highlighted) blocks. */
+@Composable
+private fun SpecialTextBlock(vm: EditorViewModel, block: EditorBlock.Text, focused: Boolean, readOnly: Boolean, palette: MarkdownEngine.Palette) {
+    val s = LocalStrings.current
+    val isToggle = block.kind == com.example.data.local.BlockType.TOGGLE
+    var open by androidx.compose.runtime.saveable.rememberSaveable(block.id) { mutableStateOf(block.value.text.isEmpty()) }
+    val concept = if (isToggle) com.example.ui.theme.Concept.FOLDERS else com.example.ui.theme.Concept.SECURITY
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (isToggle) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f) else concept.g1.copy(alpha = if (dark) 0.16f else 0.22f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(start = 6.dp, end = 40.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Top) {
+            if (isToggle) IconButton(onClick = { open = !open }, modifier = Modifier.size(44.dp)) {
+                Icon(if (open) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronLeft, if (open) s.collapse else s.expand,
+                    modifier = Modifier.then(if (!open && !s.isArabic) Modifier.graphicsLayer(scaleX = -1f) else Modifier))
+            } else Text("💡", modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+            val heading = block.value.text.substringBefore('\n')
+            if (isToggle && !open) {
+                Text(heading.ifBlank { s.toggleHint }, style = MaterialTheme.typography.titleMedium,
+                    color = if (heading.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f).clickable { open = true }.padding(vertical = 10.dp))
+            } else {
+                val transformation = remember(palette, block.id) { MarkdownEngine.Transformation(palette) }
+                BasicTextField(
+                    value = block.value, onValueChange = { vm.setText(block.id, it) }, readOnly = readOnly,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), visualTransformation = transformation,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    modifier = Modifier.weight(1f).heightIn(min = 44.dp).padding(vertical = 10.dp).onFocusChanged { if (it.isFocused) vm.focus(block.id) },
+                    decorationBox = { inner ->
+                        Box(Modifier.fillMaxWidth()) {
+                            if (block.value.text.isEmpty()) Text(if (isToggle) s.toggleHint else s.calloutHint, style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            inner()
+                        }
+                    }
+                )
             }
         }
     }

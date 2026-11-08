@@ -57,7 +57,7 @@ class ImportManager(private val context: Context, private val repository: NoteRe
     }
 
     private fun handlers(resolver: ((String) -> ImportInput?)? = null): List<ImportHandler> = listOf(
-        JsonHandler, MarkdownHandler, HtmlHandler(resolver), DocxHandler, PdfHandler, ImageHandler, PlainTextHandler
+        SamsungNotesHandler, JsonHandler, MarkdownHandler, HtmlHandler(resolver), DocxHandler, PdfHandler, ImageHandler, PlainTextHandler
     )
 
     internal fun parseOne(input: ImportInput, ctx: ImportContext): ParseOutput {

@@ -107,14 +107,15 @@ fun TabsChrome(session: SessionViewModel, home: HomeViewModel, rail: Boolean, co
         TabSpec(MainTab.NOTES, Icons.AutoMirrored.Rounded.Notes, s.tabNotes, Concept.NOTES),
         TabSpec(MainTab.TASKS, Icons.Rounded.TaskAlt, if (rail) s.tabTasks else s.tabTasksShort, Concept.TASKS),
         TabSpec(MainTab.FOLDERS, Icons.Rounded.Folder, if (rail) s.tabFolders else s.tabFoldersShort, Concept.FOLDERS),
-        TabSpec(MainTab.MORE, Icons.Rounded.MoreHoriz, s.tabMore, Concept.DATA)
+        TabSpec(MainTab.MORE, Icons.Rounded.MoreHoriz, s.tabMore, Concept.ASSISTANT)
     )
     BackHandler(enabled = tab != MainTab.NOTES) { session.selectTab(MainTab.NOTES) }
 
     @Composable fun TabIcon(sp: TabSpec, selected: Boolean) {
         val badge = if (sp.tab == MainTab.TASKS) tasks.open.size else 0
         BadgedBox(badge = { if (badge > 0) Badge { Text(s.num(badge)) } }) {
-            Icon(sp.icon, null, tint = if (selected) sp.concept.g2 else MaterialTheme.colorScheme.onSurfaceVariant)
+            // Each tab keeps its own colour; the selected one is full strength.
+            Icon(sp.icon, null, tint = if (selected) sp.concept.g2 else sp.concept.g2.copy(alpha = 0.7f))
         }
     }
 

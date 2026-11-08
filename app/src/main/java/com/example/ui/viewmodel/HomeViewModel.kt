@@ -49,7 +49,9 @@ data class NoteCardModel(
     val details: NoteWithDetails,
     val preview: String,
     val firstImagePath: String?,
-    val counts: Map<String, Int>
+    val counts: Map<String, Int>,
+    /** Live sub-notes directly under this note. */
+    val childCount: Int = 0
 ) {
     val note get() = details.note
 }
@@ -89,7 +91,13 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
                 HomeView.ALL -> n.trashedAt == null && !n.isArchived
             } && (f.folderId == null || n.folderId == f.folderId) && (f.tagId == null || d.tags.any { it.id == f.tagId })
         }
+        // Sub-notes live inside their parent (like pages in Notion): the main list shows top-level notes,
+        // plus sub-notes whose parent is gone/trashed. Search, folders and tags show everything.
+        val liveIds = notes.filter { it.note.trashedAt == null }.map { it.note.id }.toSet()
+        val childCounts = notes.filter { it.note.trashedAt == null && it.note.parentId != null }.groupingBy { it.note.parentId!! }.eachCount()
+        val hideChildren = f.view == HomeView.ALL && !f.isSearching && f.folderId == null && f.tagId == null
         val filtered = inView.filter { d ->
+            (!hideChildren || d.note.parentId == null || d.note.parentId !in liveIds) &&
             (ids == null || d.note.id in ids) &&
                 (f.color == null || d.note.colorIndex == f.color) &&
                 matchesDate(d.note.updatedAt, f.date, now) &&
@@ -102,7 +110,7 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
             NoteSort.TITLE -> filtered.sortedBy { it.note.title.lowercase() }
             NoteSort.COLOR -> filtered.sortedWith(compareBy<NoteWithDetails> { it.note.colorIndex == 0 }.thenBy { it.note.colorIndex })
         }
-        val models = sorted.map { toCard(it) }
+        val models = sorted.map { toCard(it).copy(childCount = childCounts[it.note.id] ?: 0) }
         val showPinned = f.view == HomeView.ALL && !f.isSearching
         HomeState(
             loading = false,

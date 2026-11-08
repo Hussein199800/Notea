@@ -222,12 +222,15 @@ fun NoteCard(
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
                     Text(
-                        n.title.ifBlank { if (model.preview.isBlank() && model.details.checklist.isEmpty()) s.untitled else "" },
+                        (if (n.icon.isNotBlank()) n.icon + " " else "") +
+                            n.title.ifBlank { if (model.preview.isBlank() && model.details.checklist.isEmpty()) s.untitled else "" },
                         style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)
                     )
                     if (n.isPinned) Icon(Icons.Rounded.PushPin, s.pinned, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                     if (n.isFavorite) Icon(Icons.Rounded.Star, s.favorites, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
                 }
+                if (model.childCount > 0) Text("↳ " + s.subNotesCount(model.childCount), style = MaterialTheme.typography.labelMedium,
+                    color = com.example.ui.theme.Concept.FOLDERS.g2)
                 if (n.isLocked) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)

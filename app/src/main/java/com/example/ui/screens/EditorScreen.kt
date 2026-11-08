@@ -52,6 +52,10 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.AddBox
+import androidx.compose.material.icons.rounded.VerticalAlignTop
+import androidx.compose.material.icons.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.EmojiEmotions
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatItalic
@@ -172,6 +176,12 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     var compareTarget by remember { mutableStateOf<String?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) } // color, folder, tags, reminder, history
     var linkDialog by remember { mutableStateOf(false) }
+    var iconDialog by remember { mutableStateOf(false) }
+    var parentPicker by remember { mutableStateOf(false) }
+    var linkPicker by remember { mutableStateOf(false) }
+    var manualSlash by remember { mutableStateOf(false) }
+    val graph by vm.graph.collectAsState()
+    val trigger by vm.trigger.collectAsState()
     var templateDialog by remember { mutableStateOf(false) }
     var pinDialog by remember { mutableStateOf(false) }
     var vaultDialog by remember { mutableStateOf(false) }
@@ -300,8 +310,13 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 if (st.isLocked) confirmUnlock = true
                                 else if (vaultState != VaultState.READY) vaultDialog = true else pinDialog = true
                             }
-                            if (vm.assistantAvailable) MenuItem(Icons.Rounded.AutoAwesome, s.assistant) { sheet = "assistant"; menu = false }
-                            MenuItem(Icons.Rounded.History, s.history) { sheet = "history"; menu = false }
+                            if (vm.assistantAvailable) MenuItem(Icons.Rounded.AutoAwesome, s.assistant, com.example.ui.theme.Concept.ASSISTANT) { sheet = "assistant"; menu = false }
+                            MenuItem(Icons.Rounded.EmojiEmotions, s.noteIcon, com.example.ui.theme.Concept.SECURITY) { iconDialog = true; menu = false }
+                            MenuItem(Icons.Rounded.DriveFileMove, s.moveUnderNote, com.example.ui.theme.Concept.FOLDERS) { parentPicker = true; menu = false }
+                            if (graph.parent != null) MenuItem(Icons.Rounded.VerticalAlignTop, s.moveToTop, com.example.ui.theme.Concept.FOLDERS) {
+                                menu = false; vm.moveUnder(null) { session.message(s.movedUnder) }
+                            }
+                            MenuItem(Icons.Rounded.History, s.history, com.example.ui.theme.Concept.REMINDERS) { sheet = "history"; menu = false }
                             MenuItem(Icons.Rounded.ViewQuilt, s.saveAsTemplate) { templateDialog = true; menu = false }
                             if (!st.isLocked) MenuItem(Icons.Rounded.Share, s.share) {
                                 menu = false
@@ -311,8 +326,8 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 }
                                 FileOpener.shareText(context, st.title, (st.title + "\n\n" + text).trim())
                             }
-                            MenuItem(Icons.Rounded.Archive, if (st.isArchived) s.unarchive else s.archiveAction) { menu = false; vm.toggleArchive { onClose() } }
-                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash) { menu = false; vm.moveToTrash { val id = vm.noteId; session.messageWithUndo(s.movedToTrash) { session.restoreFromTrash(id) }; onClose() } }
+                            MenuItem(Icons.Rounded.Archive, if (st.isArchived) s.unarchive else s.archiveAction, com.example.ui.theme.Concept.ARCHIVE) { menu = false; vm.toggleArchive { onClose() } }
+                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash, com.example.ui.theme.Concept.TRASH) { menu = false; vm.moveToTrash { val id = vm.noteId; session.messageWithUndo(s.movedToTrash) { session.restoreFromTrash(id) }; onClose() } }
                         }
                     }
                 }
@@ -342,6 +357,12 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                             }
                         }
                     }
+                    graph.parent?.let { p -> ParentCrumb(p) { id -> vm.flush(); onOpenNote(id) } }
+                    if (graph.icon.isNotBlank()) Text(graph.icon, style = MaterialTheme.typography.displaySmall,
+                        modifier = Modifier.padding(top = 8.dp).clickable(enabled = !readOnly) { iconDialog = true })
+                    else if (!readOnly) TextButton(onClick = { iconDialog = true }, modifier = Modifier.heightIn(min = 44.dp)) {
+                        Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(s.addIcon, style = MaterialTheme.typography.labelLarge)
+                    }
                     BasicTextField(
                         value = st.title, onValueChange = vm::setTitle, readOnly = readOnly,
                         textStyle = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -355,6 +376,9 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                     )
                     MetaLine(st, folders)
                     BlocksContent(vm, st, readOnly)
+                    if (!st.isLocked) NoteGraphSection(graph, readOnly, onOpen = { id -> vm.flush(); onOpenNote(id) },
+                        onNewChild = { vm.createChild { id -> onOpenNote(id) } },
+                        onCreateLinked = { t -> vm.createLinked(t) })
                     LaunchedEffect(st.loading, st.persisted) { if (!st.loading && st.persisted) vm.refreshRelated() }
                     RelatedNotesSection(vm, onOpen = { id -> vm.flush(); onOpenNote(id) },
                         onCompare = if (com.example.ui.screens.assistantOn(vm)) { id -> if (vm.needsConsent()) compareTarget = id else { vm.compareWith(id, false); sheet = "assistant" } } else null)
@@ -376,6 +400,42 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                 }
             }
 
+            // ------------------------------------------------ «/» menu and note pickers (above the keyboard)
+            val tr = trigger
+            val trBlock = tr?.let { t -> st.blocks.firstOrNull { it.id == t.blockId } as? com.example.ui.viewmodel.EditorBlock.Text }
+            fun triggerQuery(skip: Int): String = trBlock?.value?.let { v ->
+                val from = (tr!!.at + skip).coerceAtMost(v.text.length)
+                v.text.substring(from, v.selection.start.coerceIn(from, v.text.length))
+            }.orEmpty()
+            if (!readOnly && (manualSlash || tr?.kind == com.example.ui.viewmodel.EditorViewModel.Trigger.Kind.SLASH)) {
+                SlashPanel(if (manualSlash) "" else triggerQuery(1), onPick = { item ->
+                    manualSlash = false
+                    when (item.key) {
+                        "h" -> vm.slashLinePrefix("## ")
+                        "ul" -> vm.slashLinePrefix("- ")
+                        "ol" -> vm.slashLinePrefix("1. ")
+                        "quote" -> vm.slashLinePrefix("> ")
+                        "todo" -> vm.slashChecklist()
+                        "toggle" -> vm.insertSpecial(com.example.data.local.BlockType.TOGGLE, fromSlash = true)
+                        "callout" -> vm.insertSpecial(com.example.data.local.BlockType.CALLOUT, fromSlash = true)
+                        "sub" -> { vm.clearTrigger(); vm.createChild { id -> onOpenNote(id) } }
+                        "link" -> { vm.clearTrigger(); linkPicker = true }
+                        "image" -> { vm.clearTrigger(); pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        "scan" -> { vm.clearTrigger(); startScan() }
+                        "file" -> { vm.clearTrigger(); pickFile.launch(arrayOf("*/*")) }
+                    }
+                }, onDismiss = { manualSlash = false; vm.dismissTrigger() })
+            } else if (!readOnly && (linkPicker || tr?.kind == com.example.ui.viewmodel.EditorViewModel.Trigger.Kind.LINK)) {
+                NotePickerPanel(s.linkToNote, graph.all, if (linkPicker) "" else triggerQuery(2),
+                    onPick = { n -> linkPicker = false; vm.insertNoteLink(n.title.ifBlank { s.untitled }) },
+                    onCreate = { t -> linkPicker = false; vm.insertNoteLink(t); vm.createLinked(t) },
+                    onDismiss = { linkPicker = false; vm.dismissTrigger() })
+            } else if (parentPicker) {
+                NotePickerPanel(s.pickParent, graph.all.filter { it.id !in graph.children.map { c -> c.id } }, "",
+                    onPick = { n -> parentPicker = false; vm.moveUnder(n.id) { ok -> session.message(if (ok) s.movedUnder else s.cantMoveUnder) } },
+                    onCreate = null, onDismiss = { parentPicker = false })
+            }
+
             // ------------------------------------------------ formatting toolbar
             if (!readOnly && st.blocked == null && !st.loading) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -384,6 +444,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                         .horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Tool(Icons.Rounded.AddBox, s.insertBlock) { manualSlash = !manualSlash }
                     Tool(Icons.Rounded.CheckBox, s.checklist) { vm.insertChecklist() }
                     Tool(Icons.Rounded.FormatBold, s.bold) { vm.applyFormat { MarkdownEngine.toggleInline(it, "**") } }
                     Tool(Icons.Rounded.FormatItalic, s.italic) { vm.applyFormat { MarkdownEngine.toggleInline(it, "*") } }
@@ -476,6 +537,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     compareTarget?.let { id ->
         ConsentDialog(s.consentCompareBody, onSend = { remember -> vm.compareWith(id, remember); sheet = "assistant" }) { compareTarget = null }
     }
+    if (iconDialog) IconPickerDialog(graph.icon, onPick = { vm.setIcon(it) }) { iconDialog = false }
     if (templateDialog) TextInputDialog(s.saveAsTemplate, s.templateName, st.title, s.save, { vm.saveAsTemplate(it); session.message(s.templateSaved) }) { templateDialog = false }
     if (pinDialog) SetPinDialog(s.lockNote, withHint = true, onSet = { pin, hint ->
         scope.launch { val h = withContext(Dispatchers.Default) { PinHasher.hash(pin) }; vm.lock(h, hint); session.markOpened(vm.noteId) }
@@ -493,8 +555,9 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
 }
 
 @Composable
-private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) =
-    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null) }, onClick = onClick)
+private fun MenuItem(icon: ImageVector, label: String, concept: com.example.ui.theme.Concept? = null, onClick: () -> Unit) =
+    DropdownMenuItem(text = { Text(label, color = if (concept == com.example.ui.theme.Concept.TRASH) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified) },
+        leadingIcon = { Icon(icon, null, tint = concept?.g2 ?: MaterialTheme.colorScheme.onSurfaceVariant) }, onClick = onClick)
 
 @Composable
 private fun Tool(icon: ImageVector, label: String, onClick: () -> Unit) {

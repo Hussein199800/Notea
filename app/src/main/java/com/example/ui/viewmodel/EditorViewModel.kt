@@ -27,6 +27,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,7 +41,8 @@ import java.io.File
 /** One piece of a note's content, in display order. */
 sealed interface EditorBlock {
     val id: String
-    data class Text(override val id: String, val value: TextFieldValue) : EditorBlock
+    /** [kind]: BlockType.TEXT, TOGGLE (first line = heading) or CALLOUT. */
+    data class Text(override val id: String, val value: TextFieldValue, val kind: String = BlockType.TEXT) : EditorBlock
     data class Checklist(override val id: String) : EditorBlock
     data class Attachment(override val id: String, val attachmentId: String) : EditorBlock
 }
@@ -72,7 +78,7 @@ data class EditorState(
 ) {
     val blockDrafts: List<BlockDraft> get() = blocks.map { b ->
         when (b) {
-            is EditorBlock.Text -> BlockDraft(b.id, BlockType.TEXT, b.value.text)
+            is EditorBlock.Text -> BlockDraft(b.id, b.kind, b.value.text)
             is EditorBlock.Checklist -> BlockDraft(b.id, BlockType.CHECKLIST)
             is EditorBlock.Attachment -> BlockDraft(b.id, BlockType.ATTACHMENT, attachmentId = b.attachmentId)
         }
@@ -96,7 +102,7 @@ private fun List<BlockDraft>.toEditorBlocks(): List<EditorBlock> = map { b ->
     when (b.type) {
         BlockType.CHECKLIST -> EditorBlock.Checklist(b.id)
         BlockType.ATTACHMENT -> EditorBlock.Attachment(b.id, b.attachmentId.orEmpty())
-        else -> EditorBlock.Text(b.id, TextFieldValue(b.text))
+        else -> EditorBlock.Text(b.id, TextFieldValue(b.text), if (b.type in BlockType.TEXTUAL) b.type else BlockType.TEXT)
     }
 }
 
@@ -309,18 +315,19 @@ class EditorViewModel(
         val old = (_state.value.blocks.firstOrNull { it.id == blockId } as? EditorBlock.Text)?.value ?: return
         if (v.text == old.text) { replaceBlockQuiet(blockId, v); return } // selection only
         val smart = com.example.ui.editor.MarkdownEngine.continueList(old, v) ?: v
-        edit { s -> s.copy(blocks = s.blocks.map { if (it.id == blockId) EditorBlock.Text(blockId, smart) else it }, focusedBlockId = blockId) }
+        detectTriggers(blockId, old, smart)
+        edit { s -> s.copy(blocks = s.blocks.map { if (it.id == blockId && it is EditorBlock.Text) it.copy(value = smart) else it }, focusedBlockId = blockId) }
     }
 
     private fun replaceBlockQuiet(blockId: String, v: TextFieldValue) {
         val s = _state.value
-        _state.value = s.copy(blocks = s.blocks.map { if (it.id == blockId) EditorBlock.Text(blockId, v) else it }, focusedBlockId = blockId)
+        _state.value = s.copy(blocks = s.blocks.map { if (it.id == blockId && it is EditorBlock.Text) it.copy(value = v) else it }, focusedBlockId = blockId)
     }
 
     /** Formatting toolbar: applies to the focused text block. */
     fun applyFormat(transform: (TextFieldValue) -> TextFieldValue) = edit(coalesce = false) { s ->
         val target = s.focusedText ?: return@edit s
-        s.copy(blocks = s.blocks.map { if (it.id == target.id) EditorBlock.Text(it.id, transform(target.value)) else it })
+        s.copy(blocks = s.blocks.map { if (it.id == target.id) target.copy(value = transform(target.value)) else it })
     }
 
     /**
@@ -335,6 +342,11 @@ class EditorViewModel(
             return s.copy(blocks = list)
         }
         val idx = list.indexOfFirst { it.id == target.id }
+        if (target.kind != BlockType.TEXT) {
+            // Toggles and callouts aren't split: the new block goes right after them.
+            list.add(idx + 1, block)
+            return s.copy(blocks = list)
+        }
         val text = target.value.text
         val cut = target.value.selection.max.coerceIn(0, text.length)
         val before = text.substring(0, cut).trimEnd('\n')
@@ -415,6 +427,104 @@ class EditorViewModel(
         val nb = EditorBlock.Text(Ids.newId(), TextFieldValue(text))
         if (idx < 0) list += nb else list.add(idx + 1, nb)
         s.copy(blocks = list, focusedBlockId = nb.id)
+    }
+
+    // ------------------------------------------------------------------ «/» menu, [[links]], special blocks
+    /** Where the user just typed «/» at the start of a line, or «[[» (opens the note picker). */
+    data class Trigger(val blockId: String, val at: Int, val kind: Kind) { enum class Kind { SLASH, LINK } }
+    private val _trigger = MutableStateFlow<Trigger?>(null)
+    val trigger: StateFlow<Trigger?> = _trigger.asStateFlow()
+    fun dismissTrigger() { _trigger.value = null }
+
+    private fun detectTriggers(blockId: String, old: TextFieldValue, new: TextFieldValue) {
+        val t = new.text
+        val cur = new.selection.start
+        if (new.selection.collapsed && t.length == old.text.length + 1 && cur > 0) {
+            val typed = t[cur - 1]
+            if (typed == '/' && (cur == 1 || t[cur - 2] == '\n')) { _trigger.value = Trigger(blockId, cur - 1, Trigger.Kind.SLASH); return }
+            if (typed == '[' && cur >= 2 && t[cur - 2] == '[') { _trigger.value = Trigger(blockId, cur - 2, Trigger.Kind.LINK); return }
+        }
+        _trigger.value?.let { tr -> if (tr.blockId != blockId || cur <= tr.at || cur > tr.at + 40) _trigger.value = null }
+    }
+
+    /** Removes the «/» or «[[» the user typed (and anything typed after it on that line) before running a command. */
+    private fun consumeTrigger(s: EditorState): EditorState {
+        val tr = _trigger.value ?: return s
+        _trigger.value = null
+        val b = s.blocks.firstOrNull { it.id == tr.blockId } as? EditorBlock.Text ?: return s
+        val text = b.value.text
+        if (tr.at >= text.length) return s
+        val end = b.value.selection.start.coerceIn(tr.at, text.length)
+        val nt = text.removeRange(tr.at, end)
+        return s.copy(blocks = s.blocks.map { if (it.id == b.id) b.copy(value = TextFieldValue(nt, TextRange(tr.at))) else it }, focusedBlockId = b.id)
+    }
+
+    /** «/» commands that format the current line. */
+    fun slashLinePrefix(prefix: String) = edit(coalesce = false) { s0 ->
+        val s = consumeTrigger(s0)
+        val b = s.focusedText ?: return@edit s
+        s.copy(blocks = s.blocks.map { if (it.id == b.id) b.copy(value = com.example.ui.editor.MarkdownEngine.toggleLinePrefix(b.value, prefix)) else it })
+    }
+
+    fun slashChecklist() { edit(coalesce = false) { consumeTrigger(it) }; insertChecklist() }
+
+    /** Inserts an empty toggle or callout block at the cursor and focuses it. */
+    fun insertSpecial(kind: String, fromSlash: Boolean = false) = edit(coalesce = false) { s0 ->
+        val s = if (fromSlash) consumeTrigger(s0) else s0
+        val nb = EditorBlock.Text(Ids.newId(), TextFieldValue(""), kind)
+        insertAtCursor(s, nb).copy(focusedBlockId = nb.id)
+    }
+
+    fun clearTrigger() { if (_trigger.value != null) edit(coalesce = false) { consumeTrigger(it) } }
+
+    /** Replaces the typed «[[» with a link to [title]. */
+    fun insertNoteLink(title: String) = edit(coalesce = false) { s0 ->
+        val s = consumeTrigger(s0)
+        val b = s.focusedText ?: return@edit s
+        val v = b.value
+        val link = "[[" + title.replace("]]", "") + "]]"
+        val nt = v.text.substring(0, v.selection.min) + link + v.text.substring(v.selection.max)
+        s.copy(blocks = s.blocks.map { if (it.id == b.id) b.copy(value = TextFieldValue(nt, TextRange(v.selection.min + link.length))) else it })
+    }
+
+    // ------------------------------------------------------------------ sub-notes, icon, links
+    data class NoteRef(val id: String, val title: String, val icon: String)
+    data class NoteGraph(
+        val parent: NoteRef? = null, val children: List<NoteRef> = emptyList(),
+        val links: List<NoteRef> = emptyList(), val missingLinks: List<String> = emptyList(),
+        val backlinks: List<NoteRef> = emptyList(), val icon: String = "", val all: List<NoteRef> = emptyList()
+    )
+
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    val graph: StateFlow<NoteGraph> = kotlinx.coroutines.flow.combine(
+        repo.observeNotes(uid),
+        _state.map { it.title to it.bodyText }.distinctUntilChanged().debounce(300)
+    ) { notes, (title, body) -> buildGraph(noteId, title, body, notes) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), NoteGraph())
+
+    /** Creates a sub-note under this note and returns its id. */
+    fun createChild(title: String = "", onCreated: (String) -> Unit) = viewModelScope.launch(Dispatchers.IO) {
+        saveNow(force = true)
+        val id = repo.newNoteId()
+        repo.save(uid, NoteDraft(id = id, title = title.take(200), parentId = noteId, folderId = _state.value.folderId))
+        withContext(Dispatchers.Main) { onCreated(id) }
+    }
+
+    /** Creates a top-level note titled [title] (from a [[link]] to a note that doesn't exist yet), unless one exists. */
+    fun createLinked(title: String) = viewModelScope.launch(Dispatchers.IO) {
+        val t = title.trim().take(200)
+        if (t.isEmpty() || graph.value.all.any { com.example.core.text.NoteLinks.key(it.title) == com.example.core.text.NoteLinks.key(t) }) return@launch
+        repo.save(uid, NoteDraft(id = repo.newNoteId(), title = t, folderId = _state.value.folderId))
+    }
+
+    fun setIcon(icon: String) = viewModelScope.launch(Dispatchers.IO) { saveNow(force = true); repo.setIcon(uid, noteId, icon) }
+
+    /** Moves this note under [parentId] (null = top level). Returns false (via callback) for an impossible move. */
+    fun moveUnder(parentId: String?, onResult: (Boolean) -> Unit) = viewModelScope.launch(Dispatchers.IO) {
+        saveNow(force = true)
+        val ok = repo.setParent(uid, noteId, parentId)
+        withContext(Dispatchers.Main) { onResult(ok) }
     }
 
     fun undo() { history.undo()?.let { restore(it) } }
@@ -622,4 +732,24 @@ class EditorViewModel(
         const val AUTOSAVE_DEBOUNCE_MS = 600L
         const val SNAPSHOT_INTERVAL_MS = 5 * 60_000L
     }
+}
+
+/** Parent, children, [[links]] and backlinks of one note (live notes only; locked bodies are never read). */
+internal fun buildGraph(noteId: String, title: String, body: String, notes: List<com.example.data.local.NoteWithDetails>): EditorViewModel.NoteGraph {
+    val live = notes.filter { it.note.trashedAt == null && !it.note.deleted }
+    fun ref(n: com.example.data.local.NoteEntity) = EditorViewModel.NoteRef(n.id, n.title, n.icon)
+    val self = live.firstOrNull { it.note.id == noteId }?.note
+    val byKey = live.filter { it.note.id != noteId && it.note.title.isNotBlank() }.groupBy { com.example.core.text.NoteLinks.key(it.note.title) }
+    val linked = com.example.core.text.NoteLinks.titles(body)
+    val links = linked.mapNotNull { t -> byKey[com.example.core.text.NoteLinks.key(t)]?.maxByOrNull { it.note.updatedAt }?.note?.let(::ref) }
+    val missing = linked.filter { t -> byKey[com.example.core.text.NoteLinks.key(t)] == null }
+    val backlinks = if (title.isBlank()) emptyList() else live.filter { d ->
+        d.note.id != noteId && !d.note.isLocked && com.example.core.text.NoteLinks.linksTo(d.note.body, title)
+    }.map { ref(it.note) }
+    return EditorViewModel.NoteGraph(
+        parent = self?.parentId?.let { pid -> live.firstOrNull { it.note.id == pid }?.note?.let(::ref) },
+        children = live.filter { it.note.parentId == noteId }.sortedBy { it.note.createdAt }.map { ref(it.note) },
+        links = links, missingLinks = missing, backlinks = backlinks, icon = self?.icon.orEmpty(),
+        all = live.filter { it.note.id != noteId }.sortedByDescending { it.note.updatedAt }.map { ref(it.note) }
+    )
 }
