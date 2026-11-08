@@ -101,7 +101,10 @@ class AppContainer(val app: Application) {
 
     fun syncAvailable(uid: String) = firebaseAvailable && uid != LOCAL_UID
 
-    val aiKeys by lazy { com.example.core.ai.AiKeyStore(app) }
+    /** Device-keystore-wrapped Gemini key. Replaceable only by tests (Robolectric has no Android Keystore). */
+    @androidx.annotation.VisibleForTesting
+    var aiKeysWrapper: com.example.core.security.DeviceKeyWrapper? = null
+    val aiKeys by lazy { aiKeysWrapper?.let { com.example.core.ai.AiKeyStore(app, it) } ?: com.example.core.ai.AiKeyStore(app) }
     val assistant by lazy { com.example.core.ai.NoteAssistant(com.example.core.ai.GeminiClient(), aiKeys) }
 
     /** Assistant is offered only when the user enabled it and saved a key. */

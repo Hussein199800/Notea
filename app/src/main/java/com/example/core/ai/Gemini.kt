@@ -93,14 +93,19 @@ class GeminiClient(private val baseUrl: String = "https://generativelanguage.goo
     }
 
     /** One request with an image (base64 inline). Plain-text answer. */
-    fun generateWithImage(key: String, model: String, system: String, prompt: String, image: ByteArray, mime: String, maxOutputTokens: Int = 4000): String {
+    fun generateWithImage(key: String, model: String, system: String, prompt: String, image: ByteArray, mime: String, maxOutputTokens: Int = 4000): String =
+        generateWithMedia(key, model, system, prompt, image, mime, maxOutputTokens, jsonOutput = false)
+
+    /** One request with one inline media part (image or audio). */
+    fun generateWithMedia(key: String, model: String, system: String, prompt: String, image: ByteArray, mime: String, maxOutputTokens: Int, jsonOutput: Boolean): String {
         val parts = JSONArray()
             .put(JSONObject().put("inline_data", JSONObject().put("mime_type", mime).put("data", android.util.Base64.encodeToString(image, android.util.Base64.NO_WRAP))))
             .put(JSONObject().put("text", prompt))
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
-            .put("generationConfig", JSONObject().put("maxOutputTokens", maxOutputTokens).put("temperature", 0.0))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", maxOutputTokens).put("temperature", 0.0)
+                .apply { if (jsonOutput) put("responseMimeType", "application/json") })
         val res = request("POST", "$baseUrl/$model:generateContent", key, body.toString())
         val cand = res.optJSONArray("candidates")?.optJSONObject(0) ?: throw AiError.Blocked()
         val out = cand.optJSONObject("content")?.optJSONArray("parts") ?: return ""

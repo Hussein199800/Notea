@@ -254,6 +254,7 @@ private fun AttachmentBlock(vm: EditorViewModel, a: AttachmentEntity, blockId: S
             }
         }
         if ((a.kind == AttachmentKind.IMAGE || a.kind == AttachmentKind.PDF) && !noteLocked && !a.encrypted) OcrPanel(vm, a, blockId, readOnly)
+        if (a.kind == AttachmentKind.AUDIO && !noteLocked && !a.encrypted) AudioPanel(vm, a, blockId, readOnly)
     }
 }
 
@@ -355,6 +356,41 @@ private fun SpecialTextBlock(vm: EditorViewModel, block: EditorBlock.Text, focus
                         }
                     }
                 )
+            }
+        }
+    }
+}
+
+/** Transcript of a recording (Gemini, after consent): stored with the recording, searchable, insertable. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AudioPanel(vm: EditorViewModel, a: AttachmentEntity, blockId: String, readOnly: Boolean) {
+    val s = LocalStrings.current
+    val clipboard = LocalClipboardManager.current
+    val busy by vm.transcribing.collectAsState()
+    var consent by remember { mutableStateOf(false) }
+    val run: (Boolean) -> Unit = { r -> vm.transcribe(a.id, r, s.summaryLabel, { s.aiError(it) }, s.transcribeDone) }
+    if (consent) ConsentDialog(s.consentAudioBody, onSend = run) { consent = false }
+    val text = a.extractedText
+    when {
+        a.id in busy -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp)); Text(s.transcribing, style = MaterialTheme.typography.labelMedium)
+        }
+        text.isBlank() || text == OcrWorker.NO_TEXT -> if (!readOnly) {
+            if (vm.assistantReady) TextButton(onClick = { if (vm.needsConsent()) consent = true else run(false) }, modifier = Modifier.heightIn(min = 44.dp)) {
+                Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(s.transcribe)
+            } else Text(s.transcribeHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
+        }
+        else -> Surface(shape = MaterialTheme.shapes.medium, color = com.example.ui.theme.Concept.ASSISTANT.g1.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(s.transcriptTitle, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ExpandableText(text, collapsedLines = 5, style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(s.copy) }
+                    if (!readOnly) TextButton(onClick = { vm.insertTextAfter(blockId, text) }) { Text(s.insertIntoNote) }
+                }
             }
         }
     }

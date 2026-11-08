@@ -18,7 +18,7 @@ android {
     minSdk = 24
     targetSdk = 36
     // Version lives in 3 places, checked by VersionMatchTest: here, core/Changelog.kt, release-notes.md.
-    versionName = "1.3.0"
+    versionName = "1.4.0"
     // versionCode = version×10 + abi (universal 0, armeabi-v7a 1, arm64-v8a 2); 1.2.0 → 102000.
     versionCode = noteaBaseCode(versionName!!) * 10
 

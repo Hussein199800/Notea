@@ -25,7 +25,7 @@
 - Images: `ImageNormalizer` (HEIC/AVIF -> JPEG, TIFF via `TiffDecoder` -> PNG/JPEG, unsupported kept as file). OCR is on-device Tesseract (ara+eng) in `OcrWorker`; never stores OCR text for locked notes.
 - Versions: named versions (label) are never trimmed; diff via `TextDiff`.
 - Phone-to-phone transfer: raw TCP on the LAN, payload is a password-encrypted backup, the one-time code is the password.
-- AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, one note per request, input capped at 12k chars; no whole-library AI features (token cost). Notea Memory is on-device (no AI).
+- AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, input capped at 12k chars. Per request: one note, one selection, one image or one recording (≤ 14 MB). The only multi-note feature is «اسأل ملاحظاتك» (owner-approved v1.4): retrieval runs on the device (`NoteMemory.Index.search`) and at most 5 unlocked notes are sent, listed by name in the consent dialog. Locked notes and encrypted attachments are never sent. Changes made by the assistant always keep a version first. Notea Memory is on-device (no AI).
 
 ## Owner's work standard (v1.2 — apply to all future work)
 - Replies to the owner: Arabic only, short, direct, practical. Questions via the options tool in Arabic, recommended option first.

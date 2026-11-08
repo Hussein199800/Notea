@@ -9,6 +9,25 @@ object Changelog {
 
     val releases = listOf(
         Release(
+            "1.4.0", "2026-11-09",
+            ar = listOf(
+                "«اسأل عن هذه الملاحظة»: محادثة حرة والجواب من الملاحظة فقط",
+                "أدوات الكتابة على النص المحدد أو الفقرة: تحسين، تصحيح، اختصار، إطالة، ترجمة، صياغة رسمية أو قانونية",
+                "«اسأل ملاحظاتك»: سؤال عن كل ملاحظاتك؛ البحث على الهاتف ويُرسل أقرب 5 ملاحظات فقط مع ذكر المصادر",
+                "تفريغ التسجيلات الصوتية إلى نص مع ملخص، ويصبح قابلاً للبحث",
+                "اقتراح عنوان ووسوم ومجلد تختار ما تقبله منها",
+                "المساعد متاح في كل ملاحظة غير مقفلة مهما كانت قصيرة، وتُحفظ نسخة قبل أي تغيير"
+            ),
+            en = listOf(
+                "Ask about this note: free conversation answered from the note only",
+                "Writing tools on the selection or paragraph: improve, fix, shorten, expand, translate, formal or legal wording",
+                "Ask your notes: a question about all notes; search runs on the phone and only the 5 closest notes are sent, with sources",
+                "Transcribe recordings to searchable text with a summary",
+                "Suggested title, tags and folder — you pick what to accept",
+                "The assistant is available in every unlocked note, however short; a version is kept before any change"
+            )
+        ),
+        Release(
             "1.3.0", "2026-11-09",
             ar = listOf(
                 "قراءة دقيقة للصور بزر واحد عبر Gemini بمفتاحك، تقرأ الجداول والمستندات الرسمية بعد موافقتك",

@@ -37,6 +37,7 @@ sealed interface Screen {
     data object Releases : Screen
     data object Diagnostics : Screen
     data object Update : Screen
+    data object AskNotes : Screen
 }
 
 /** Shared incoming content from Android share sheet / widgets / notifications. */

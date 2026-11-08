@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -114,7 +115,14 @@ sealed interface AssistantUi {
     data class PlanResult(val plan: com.example.core.ai.NoteAssistant.Plan) : AssistantUi
     data class CompareResult(val otherTitle: String, val value: com.example.core.ai.NoteAssistant.Comparison) : AssistantUi
     data class Failed(val error: Throwable) : AssistantUi
+    /** «اسأل عن الملاحظة»: conversation about this note only. */
+    data class Chat(val turns: List<com.example.core.ai.NoteAssistant.Turn>, val loading: Boolean = false, val error: Throwable? = null) : AssistantUi
+    data class RewriteResult(val mode: com.example.core.ai.NoteAssistant.Rewrite, val target: RewriteTarget, val result: String) : AssistantUi
+    data class SuggestResult(val value: com.example.core.ai.NoteAssistant.Suggestion) : AssistantUi
 }
+
+/** The text a writing tool works on: a selection, or the whole focused text block. */
+data class RewriteTarget(val blockId: String, val start: Int, val end: Int, val original: String, val isSelection: Boolean)
 
 sealed interface EditorEvent {
     data object EncryptionFailed : EditorEvent
@@ -185,6 +193,108 @@ class EditorViewModel(
     }
 
     fun dismissAssistant() { _assistant.value = AssistantUi.Idle }
+
+    /** Assistant tools that work on any (unlocked) note, however short. */
+    val assistantReady: Boolean get() = container.assistantReady() && !_state.value.isLocked && _state.value.blocked == null
+    val assistantConfigured: Boolean get() = container.assistantReady()
+
+    fun openChat() { _assistant.value = AssistantUi.Chat(emptyList()) }
+
+    fun ask(question: String, rememberConsent: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        if (!assistantReady || question.isBlank()) return@launch
+        if (rememberConsent) container.aiKeys.rememberConsent = true
+        val chat = _assistant.value as? AssistantUi.Chat ?: AssistantUi.Chat(emptyList())
+        _assistant.value = chat.copy(loading = true, error = null)
+        _assistant.value = try {
+            val answer = container.assistant.ask(assistantPayload().first, chat.turns, question)
+            AssistantUi.Chat(chat.turns + com.example.core.ai.NoteAssistant.Turn(question.trim(), answer))
+        } catch (e: Throwable) { chat.copy(loading = false, error = e) }
+    }
+
+    fun insertAnswer(question: String, answer: String) = withAssistantSnapshot { s ->
+        s.copy(blocks = s.blocks + EditorBlock.Text(Ids.newId(), TextFieldValue("> $question"), com.example.data.local.BlockType.CALLOUT)
+            + EditorBlock.Text(Ids.newId(), TextFieldValue(answer)))
+    }
+
+    /** What a writing tool would change right now (selection, else the focused/first text block). */
+    fun rewriteTarget(): RewriteTarget? {
+        val s = _state.value
+        val b = s.focusedText ?: s.blocks.firstOrNull { it is EditorBlock.Text && it.value.text.isNotBlank() } as? EditorBlock.Text ?: return null
+        val sel = b.value.selection
+        return if (!sel.collapsed && b.id == s.focusedBlockId) RewriteTarget(b.id, sel.min, sel.max, b.value.text.substring(sel.min, sel.max), true)
+        else b.value.text.takeIf { it.isNotBlank() }?.let { RewriteTarget(b.id, 0, it.length, it, false) }
+    }
+
+    fun rewrite(mode: com.example.core.ai.NoteAssistant.Rewrite, target: RewriteTarget, rememberConsent: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        if (!assistantReady) return@launch
+        if (rememberConsent) container.aiKeys.rememberConsent = true
+        _assistant.value = AssistantUi.Loading
+        _assistant.value = try { AssistantUi.RewriteResult(mode, target, container.assistant.rewrite(target.original, mode)) } catch (e: Throwable) { AssistantUi.Failed(e) }
+    }
+
+    /** Replaces the target text (if unchanged since) or inserts the result right after its block. A version is kept first. */
+    fun applyRewrite(r: AssistantUi.RewriteResult, replace: Boolean) = withAssistantSnapshot { s ->
+        val b = s.blocks.firstOrNull { it.id == r.target.blockId } as? EditorBlock.Text
+        val t = b?.value?.text
+        if (replace && b != null && t != null && r.target.end <= t.length && t.substring(r.target.start, r.target.end) == r.target.original) {
+            val nt = t.substring(0, r.target.start) + r.result + t.substring(r.target.end)
+            s.copy(blocks = s.blocks.map { if (it.id == b.id) b.copy(value = TextFieldValue(nt, TextRange(r.target.start + r.result.length))) else it })
+        } else {
+            val idx = s.blocks.indexOfFirst { it.id == r.target.blockId }
+            val nb = EditorBlock.Text(Ids.newId(), TextFieldValue(r.result))
+            val list = s.blocks.toMutableList(); if (idx < 0) list += nb else list.add(idx + 1, nb)
+            s.copy(blocks = list)
+        }
+    }
+
+    fun suggest(rememberConsent: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        if (!assistantReady) return@launch
+        if (rememberConsent) container.aiKeys.rememberConsent = true
+        _assistant.value = AssistantUi.Loading
+        _assistant.value = try {
+            val folders = container.db.folderDao().allIncludingDeleted(uid).filter { !it.deleted }.map { it.name }
+            val tags = repo.observeTags(uid).first().map { it.name }
+            AssistantUi.SuggestResult(container.assistant.suggestMeta(assistantPayload().first, folders, tags))
+        } catch (e: Throwable) { AssistantUi.Failed(e) }
+    }
+
+    fun applySuggestion(title: String?, tags: List<String>, folderName: String?) = viewModelScope.launch(Dispatchers.IO) {
+        val folderId = folderName?.let { repo.findFolderByName(uid, it)?.id }
+        withContext(Dispatchers.Main) {
+            edit(coalesce = false) { s ->
+                s.copy(title = title?.takeIf { it.isNotBlank() } ?: s.title, tags = (s.tags + tags).distinct(), folderId = folderId ?: s.folderId)
+            }
+        }
+        _assistant.value = AssistantUi.Idle
+    }
+
+    /** Recordings being transcribed. */
+    private val _transcribing = MutableStateFlow<Set<String>>(emptySet())
+    val transcribing: StateFlow<Set<String>> = _transcribing.asStateFlow()
+
+    /** Transcribes one recording with Gemini (after consent); the text is stored with the recording and is searchable. */
+    fun transcribe(attachmentId: String, rememberConsent: Boolean, summaryLabel: String, failMessage: (Throwable) -> String, doneMessage: String) = viewModelScope.launch(Dispatchers.IO) {
+        if (!assistantReady) return@launch
+        val a = _state.value.attachments.firstOrNull { it.id == attachmentId } ?: return@launch
+        if (a.encrypted || a.kind != AttachmentKind.AUDIO) return@launch
+        if (rememberConsent) container.aiKeys.rememberConsent = true
+        _transcribing.value = _transcribing.value + attachmentId
+        try {
+            val f = repo.attachments.file(uid, a.localPath)
+            if (f.length() > com.example.core.ai.NoteAssistant.MAX_AUDIO_BYTES) throw com.example.core.ai.AiError.Other("too long")
+            val mime = a.mimeType.takeIf { it.startsWith("audio/") }?.let { if (it == "audio/m4a" || it == "audio/x-m4a") "audio/mp4" else it } ?: "audio/mp4"
+            val t = container.assistant.transcribe(f, mime)
+            val text = buildString {
+                if (t.summary.isNotBlank()) append("**").append(summaryLabel).append(":** ").append(t.summary).append("\n\n")
+                append(t.text)
+            }.trim()
+            repo.setExtractedText(a.id, text.ifBlank { com.example.ocr.OcrWorker.NO_TEXT })
+            _events.tryEmit(EditorEvent.Message(doneMessage))
+        } catch (e: Throwable) {
+            com.example.core.Diagnostics.log(container.app, "ai-audio", "Transcription failed", e)
+            _events.tryEmit(EditorEvent.Message(failMessage(e)))
+        } finally { _transcribing.value = _transcribing.value - attachmentId }
+    }
 
     /** Attachments currently being read by Gemini (precise OCR). */
     private val _preciseOcr = MutableStateFlow<Set<String>>(emptySet())

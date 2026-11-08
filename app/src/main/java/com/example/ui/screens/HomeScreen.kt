@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -205,6 +206,9 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         }
                         if (filter.query.isNotEmpty()) IconButton(onClick = { vm.setFilter { it.copy(query = "") } }) { Icon(Icons.Rounded.Close, s.clearFilters) }
                         else Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (session.container.assistantReady()) IconButton(onClick = { session.navigate(Screen.AskNotes) }) {
+                            Icon(Icons.Rounded.AutoAwesome, s.askLibrary, tint = com.example.ui.theme.Concept.ASSISTANT.g2)
+                        }
                         IconButton(onClick = { showFilters = true }) {
                             Icon(Icons.Rounded.Tune, s.filters, tint = if (filter.hasRefinements) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         }

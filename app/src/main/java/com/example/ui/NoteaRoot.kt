@@ -229,6 +229,7 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     Screen.Releases -> com.example.ui.screens.ReleasesScreen(session)
                     Screen.Diagnostics -> com.example.ui.screens.DiagnosticsScreen(session)
                     Screen.Update -> com.example.ui.screens.UpdateScreen(session)
+                    Screen.AskNotes -> com.example.ui.screens.AskNotesScreen(session)
                 }
             }
         }

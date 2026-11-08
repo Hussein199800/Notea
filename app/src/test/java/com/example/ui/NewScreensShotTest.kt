@@ -47,7 +47,7 @@ import java.io.File
 class NewScreensShotTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private val app = ApplicationProvider.getApplicationContext<android.app.Application>()
-    private val container by lazy { AppContainer(app) }
+    private val container by lazy { AppContainer(app).also { it.aiKeysWrapper = com.example.core.FakeWrapper() } }
 
     @org.junit.Before fun initWork() {
         androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(app)
@@ -206,5 +206,28 @@ class NewScreensShotTest {
         rule.waitForIdle()
         org.junit.Assert.assertNull(vm.trigger.value)
         org.junit.Assert.assertTrue(vm.state.value.blocks.none { it is com.example.ui.viewmodel.EditorBlock.Text && it.value.text.contains("/") })
+    }
+
+    @Test fun askNotes_ar() {
+        container.aiKeys.setKey("test-key"); container.aiKeys.enabled = true
+        val session = SessionViewModel(container, LOCAL_UID)
+        rule.setContent { Frame { com.example.ui.screens.AskNotesScreen(session) } }
+        save("ask_notes_ar")
+        org.junit.Assert.assertTrue(rule.onAllNodesWithText("اسأل ملاحظاتك", substring = true).fetchSemanticsNodes().isNotEmpty())
+        container.aiKeys.clear()
+    }
+
+    @Test fun assistantSheet_ar() {
+        container.aiKeys.setKey("test-key"); container.aiKeys.enabled = true
+        runBlocking { container.repository.save(LOCAL_UID, NoteDraft(id = "short", title = "قصيرة", body = "نص قصير يحتاج تحسيناً")) }
+        val vm = EditorViewModel(container, LOCAL_UID, "short")
+        repeat(4) { rule.mainClock.advanceTimeBy(200); Thread.sleep(100) }
+        org.junit.Assert.assertTrue(vm.assistantReady)   // short notes get the assistant too
+        org.junit.Assert.assertFalse(vm.assistantAvailable) // summary/tasks/plan stay for longer notes
+        rule.setContent { Frame { com.example.ui.screens.AssistantSheet(vm) {} } }
+        repeat(4) { rule.mainClock.advanceTimeBy(200); Thread.sleep(100) }
+        saveDialog("assistant_sheet_ar")
+        org.junit.Assert.assertTrue(rule.onAllNodesWithText("أدوات الكتابة").fetchSemanticsNodes().isNotEmpty())
+        container.aiKeys.clear()
     }
 }

@@ -310,7 +310,10 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 if (st.isLocked) confirmUnlock = true
                                 else if (vaultState != VaultState.READY) vaultDialog = true else pinDialog = true
                             }
-                            if (vm.assistantAvailable) MenuItem(Icons.Rounded.AutoAwesome, s.assistant, com.example.ui.theme.Concept.ASSISTANT) { sheet = "assistant"; menu = false }
+                            if (vm.assistantReady) MenuItem(Icons.Rounded.AutoAwesome, s.assistant, com.example.ui.theme.Concept.ASSISTANT) { sheet = "assistant"; menu = false }
+                            else if (!vm.assistantConfigured && !st.isLocked) MenuItem(Icons.Rounded.AutoAwesome, s.setUpAssistant, com.example.ui.theme.Concept.ASSISTANT) {
+                                menu = false; vm.flush(); session.navigate(com.example.ui.viewmodel.Screen.AssistantSettings)
+                            }
                             MenuItem(Icons.Rounded.EmojiEmotions, s.noteIcon, com.example.ui.theme.Concept.SECURITY) { iconDialog = true; menu = false }
                             MenuItem(Icons.Rounded.DriveFileMove, s.moveUnderNote, com.example.ui.theme.Concept.FOLDERS) { parentPicker = true; menu = false }
                             if (graph.parent != null) MenuItem(Icons.Rounded.VerticalAlignTop, s.moveToTop, com.example.ui.theme.Concept.FOLDERS) {

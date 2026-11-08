@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.NewReleases
@@ -355,6 +356,7 @@ fun MoreTab(session: SessionViewModel) {
         item { SectionLabel(s.moreApp) }
         item {
             PreferenceGroup {
+                ConceptRow(Icons.Rounded.QuestionAnswer, Concept.ASSISTANT, s.askLibrary, s.askLibraryDesc, onClick = { session.navigate(Screen.AskNotes) })
                 ConceptRow(Icons.Rounded.AutoAwesome, Concept.ASSISTANT, s.assistant, s.assistantDesc, onClick = { session.navigate(Screen.AssistantSettings) })
                 ConceptRow(Icons.Rounded.Settings, Concept.ARCHIVE, s.settings, s.settingsDesc, onClick = { session.navigate(Screen.Settings) })
                 ConceptRow(Icons.Rounded.SystemUpdate, Concept.NOTES, s.updates, s.updatesDesc, onClick = { session.navigate(Screen.Update) })

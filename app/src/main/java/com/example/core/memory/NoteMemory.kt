@@ -58,6 +58,20 @@ object NoteMemory {
         private val vectors: Map<String, Map<String, Double>>,
         private val titles: Map<String, String>
     ) {
+        /** Notes that best match a free-text question (on-device retrieval for the library assistant). */
+        fun search(query: String, k: Int = 5): List<String> {
+            val q = terms(query).keys
+            if (q.isEmpty()) return emptyList()
+            val qn = ArabicNormalizer.normalize(query)
+            return vectors.asSequence().map { (id, w) ->
+                var score = q.sumOf { t -> w[t] ?: 0.0 }
+                val title = ArabicNormalizer.normalize(titles[id].orEmpty())
+                if (title.isNotBlank() && q.any { title.contains(it) }) score += 0.25
+                if (title.isNotBlank() && qn.contains(title)) score += 0.5
+                id to score
+            }.filter { it.second > 0.0 }.sortedByDescending { it.second }.take(k).map { it.first }.toList()
+        }
+
         fun related(noteId: String, k: Int = 5, minScore: Double = 0.08): List<Related> {
             val v = vectors[noteId] ?: return emptyList()
             return vectors.asSequence().filter { it.key != noteId }.map { (id, w) ->
