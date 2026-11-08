@@ -88,7 +88,7 @@ object AudioPlayer {
 
 object FileOpener {
     fun open(context: Context, file: File, mime: String): Boolean {
-        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+        val uri = runCatching { FileProvider.getUriForFile(context, context.packageName + ".files", file) }.getOrNull() ?: return false
         val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime.ifBlank { "*/*" })
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         return try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }

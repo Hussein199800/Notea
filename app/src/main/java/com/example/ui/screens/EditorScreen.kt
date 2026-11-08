@@ -220,9 +220,12 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     }
     fun launchCamera() {
         val f = java.io.File(context.cacheDir, "camera/scan_${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
-        cameraUri.value = uri
-        runCatching { takePicture.launch(uri) }.onFailure { session.message(s.noAppToOpen) }
+        // Never let a camera hand-off problem close the app: show a message instead.
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
+            cameraUri.value = uri
+            takePicture.launch(uri)
+        }.onFailure { session.message(s.noAppToOpen) }
     }
     fun startScan() {
         val activity = context.findActivity()

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Every folder handed to other apps through FileProvider (viewer, camera). FileProviderPathsTest checks them. -->
 <paths>
     <files-path name="attachments" path="attachments/" />
     <cache-path name="decrypted" path="decrypted/" />
+    <cache-path name="camera" path="camera/" />
 </paths>

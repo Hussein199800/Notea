@@ -150,8 +150,10 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
     }
     fun qrPhoto() {
         qrFile.parentFile?.mkdirs()
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", qrFile)
-        runCatching { qrCapture.launch(uri) }.onFailure { error = s.scannerUnavailable }
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", qrFile)
+            qrCapture.launch(uri)
+        }.onFailure { error = s.scannerUnavailable }
     }
 
     PageScaffold(s.transferTitle, onBack = { data.cancelTransfer(); session.back() }) {
