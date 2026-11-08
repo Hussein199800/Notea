@@ -26,6 +26,7 @@ object MarkdownEngine {
     private val underline = Regex("\\+\\+(?=\\S)(.+?)(?<=\\S)\\+\\+")
     private val strike = Regex("~~(?=\\S)(.+?)(?<=\\S)~~")
     private val link = Regex("\\[([^\\]\\n]+)]\\((https?://[^)\\s]+)\\)")
+    private val noteLink = Regex("\\[\\[([^\\[\\]\\n]{1,120})]]")
     private val bareUrl = Regex("(?<![(\\[])\\bhttps?://[^\\s)]+")
     private val heading = Regex("^(#{1,3}) ")
     private val bullet = Regex("^(\\s*)([-*•]|\\d+[.)]) ")
@@ -71,6 +72,12 @@ object MarkdownEngine {
             b.addStyle(SpanStyle(color = p.link, textDecoration = TextDecoration.Underline), g.first, g.last + 1)
             b.addStringAnnotation("url", m.groupValues[2], m.range.first, m.range.last + 1)
         }
+        // [[note links]]: brackets dimmed, title coloured like a link.
+        for (m in noteLink.findAll(text)) {
+            b.addStyle(markerStyle, m.range.first, m.range.first + 2)
+            b.addStyle(markerStyle, m.range.last - 1, m.range.last + 1)
+            b.addStyle(SpanStyle(color = p.link, fontWeight = FontWeight.Medium), m.range.first + 2, m.range.last - 1)
+        }
         for (m in bareUrl.findAll(text)) {
             b.addStyle(SpanStyle(color = p.link, textDecoration = TextDecoration.Underline), m.range.first, m.range.last + 1)
             b.addStringAnnotation("url", m.value, m.range.first, m.range.last + 1)
@@ -96,6 +103,7 @@ object MarkdownEngine {
 
     /** Plain preview for cards/widgets/search snippets: markers removed. */
     fun plain(text: String): String = text
+        .replace(noteLink) { it.groupValues[1] }
         .replace(link) { it.groupValues[1] }
         .replace(bold) { it.groupValues[1] }
         .replace(underline) { it.groupValues[1] }

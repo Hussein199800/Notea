@@ -172,4 +172,39 @@ class NewScreensShotTest {
         session.markOnboarded()
         org.junit.Assert.assertEquals(SessionViewModel.HelpPrompt.WHATS_NEW, session.help.value)
     }
+
+    @Test fun editor_notion_ar() {
+        val repo = container.repository
+        runBlocking {
+            repo.save(LOCAL_UID, NoteDraft(id = "proj", title = "قضايا الموكلين", icon = "⚖️"))
+            repo.save(LOCAL_UID, NoteDraft(id = "dates", title = "مواعيد الجلسات", body = "الجلسة القادمة يوم الأحد"))
+            repo.save(LOCAL_UID, NoteDraft(id = "case", title = "قضية رقم 245", parentId = "proj", icon = "📁", blocks = listOf(
+                BlockDraft("t1", BlockType.TEXT, "ملخص القضية. راجع [[مواعيد الجلسات]] و [[الأدلة]]"),
+                BlockDraft("g1", BlockType.TOGGLE, "تفاصيل الموكل\nالاسم والعنوان ورقم الهاتف"),
+                BlockDraft("k1", BlockType.CALLOUT, "لا تنسَ إحضار الوكالة الأصلية"),
+                BlockDraft("t2", BlockType.TEXT, "")
+            )))
+            repo.save(LOCAL_UID, NoteDraft(id = "sub1", title = "المذكرات", parentId = "case", icon = "📝"))
+            repo.save(LOCAL_UID, NoteDraft(id = "back", title = "متابعة", body = "مرتبطة بـ [[قضية رقم 245]]"))
+        }
+        val session = SessionViewModel(container, LOCAL_UID)
+        val vm = EditorViewModel(container, LOCAL_UID, "case")
+        rule.setContent { Frame { EditorScreen(session, vm, emptyList()) {} } }
+        repeat(8) { rule.mainClock.advanceTimeBy(250); Thread.sleep(150) }
+        save("editor_notion_ar")
+        org.junit.Assert.assertTrue(rule.onAllNodesWithText("المذكرات", substring = true).fetchSemanticsNodes().isNotEmpty())
+        org.junit.Assert.assertTrue(rule.onAllNodesWithText("متابعة", substring = true).fetchSemanticsNodes().isNotEmpty())
+        // «/» at the start of a line opens the insert menu.
+        rule.runOnUiThread {
+            vm.focus("t2")
+            vm.setText("t2", androidx.compose.ui.text.input.TextFieldValue("/", androidx.compose.ui.text.TextRange(1)))
+        }
+        repeat(4) { rule.mainClock.advanceTimeBy(200); Thread.sleep(100) }
+        org.junit.Assert.assertNotNull(vm.trigger.value)
+        save("editor_slash_ar")
+        rule.runOnUiThread { vm.insertSpecial(BlockType.CALLOUT, fromSlash = true) }
+        rule.waitForIdle()
+        org.junit.Assert.assertNull(vm.trigger.value)
+        org.junit.Assert.assertTrue(vm.state.value.blocks.none { it is com.example.ui.viewmodel.EditorBlock.Text && it.value.text.contains("/") })
+    }
 }

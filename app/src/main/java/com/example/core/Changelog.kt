@@ -9,6 +9,29 @@ object Changelog {
 
     val releases = listOf(
         Release(
+            "1.3.0", "2026-11-09",
+            ar = listOf(
+                "قراءة دقيقة للصور بزر واحد عبر Gemini بمفتاحك، تقرأ الجداول والمستندات الرسمية بعد موافقتك",
+                "قراءة الجهاز تقبل الآن النص القصير الواضح مثل كلمات المرور",
+                "عند تعذّر ماسح Google: تثبيته بضغطة، أو كاميرا الهاتف بوضع المستندات، أو التقاط سريع، أو صورة من المعرض",
+                "استيراد ملفات Samsung Notes بصيغة sdocx مباشرة: النص والصور",
+                "ملاحظات فرعية داخل ملاحظة رئيسية، وأيقونة لكل ملاحظة",
+                "قائمة «/» للإدراج، وكتل قابلة للطي، وكتل تنبيه",
+                "روابط بين الملاحظات بكتابة [[ مع قائمة الملاحظات التي تشير إلى كل ملاحظة",
+                "لون ثابت لكل تبويب ولكل إجراء: الحذف والأرشفة والحذف النهائي وغيرها"
+            ),
+            en = listOf(
+                "One-tap precise image reading with Gemini (your key), for tables and official documents, after consent",
+                "On-device reading now accepts short clear text such as passwords",
+                "When Google's scanner isn't available: install it in one tap, use the phone camera's document mode, a quick photo, or the gallery",
+                "Import Samsung Notes files (sdocx) directly: text and images",
+                "Sub-notes inside a parent note, and an icon per note",
+                "/ insert menu, toggle blocks and callout blocks",
+                "Links between notes with [[, plus the notes that link to each note",
+                "A fixed colour per tab and per action: delete, archive, delete forever and more"
+            )
+        ),
+        Release(
             "1.2.0", "2026-11-08",
             ar = listOf(
                 "أربعة تبويبات: الملاحظات، المهام والتذكيرات، المجلدات والوسوم، المزيد",

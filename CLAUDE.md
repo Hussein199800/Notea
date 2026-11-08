@@ -43,3 +43,12 @@
 - CI (`.github/workflows/android.yml`): tests on every push; signed per-ABI release only with the NOTEA_* secrets; publishes on `main` once per version; debug builds are never published; the key is never uploaded.
 - Background: heavy work goes through WorkManager; OCR runs as a single serial queue with a foreground progress notification.
 - Before any push: all unit tests + `assembleRelease`, screenshots reviewed by eye. Never claim a test that wasn't run.
+
+## v1.3 additions
+- Sub-notes: `notes.parentId` (schema v4, additive `MIGRATION_3_4`); `NoteDraft.parentId/icon = null` means "keep stored value" — change them only via `NoteRepository.setParent` (refuses cycles) / `setIcon` / `restoreMeta` (backups). The main list hides sub-notes whose parent is live; search/folders/tags show all.
+- Block types: `text`, `toggle` (first line = heading), `callout`, `checklist`, `attachment`. `BlockType.TEXTUAL` blocks are joined into `notes.body`.
+- Editor: «/» at a line start opens the insert menu; «[[» opens the note picker; `[[Title]]` links resolve by Arabic-normalized title (`core/text/NoteLinks`); backlinks never read locked notes.
+- OCR: on-device Tesseract stays automatic; «قراءة دقيقة» sends ONE image (downscaled ≤ 2000px) to Gemini with the user's key after consent, and replaces the stored OCR text. Never for locked/encrypted attachments.
+- Scanning: if Google's scanner isn't ready, show the chooser (install module with progress / phone camera document mode then gallery / quick photo / gallery) — never a dead end.
+- Samsung Notes `.sdocx` import is best-effort (UTF-16 text runs + media images) and always flags FORMATTING_LOST.
+- Colours: every tab and every action icon uses its Concept colour (trash = TRASH.g2, delete forever = TRASH.t2, archive = ARCHIVE, pin = SECURITY, favourite = TASKS, folder/sub-notes = FOLDERS, links = REMINDERS).
