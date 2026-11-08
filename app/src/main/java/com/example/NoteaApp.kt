@@ -144,8 +144,21 @@ class AppContainer(val app: Application) {
             LegacyUpgrader(db, repository, isArabic()).run()
             if (db.searchDao().count() == 0) db.noteDao().knownUserIds().forEach { repository.reindexAll(it) }
             rescheduleAllReminders()
+            rerunOcrWithBetterModel()
         }
         AutoBackupWorker.schedule(app, settings.state.value.autoBackup)
+    }
+
+    /** One-time: text read by the old fast model is discarded and read again with the accurate model + filter. */
+    private suspend fun rerunOcrWithBetterModel() {
+        val prefs = app.getSharedPreferences("notea_ocr", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("rerun_v2", false)) return
+        db.attachmentDao().allScannable().filter { it.extractedText.isNotEmpty() }.forEach { a ->
+            db.attachmentDao().upsert(a.copy(extractedText = ""))
+            repository.reindexNote(a.userId, a.noteId)
+            com.example.ocr.OcrWorker.enqueue(app, a.id)
+        }
+        prefs.edit().putBoolean("rerun_v2", true).apply()
     }
 
     suspend fun rescheduleAllReminders() {

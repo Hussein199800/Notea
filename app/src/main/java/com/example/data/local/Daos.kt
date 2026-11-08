@@ -156,6 +156,9 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE userId = :userId")
     suspend fun allForUser(userId: String): List<AttachmentEntity>
 
+    @Query("SELECT * FROM attachments WHERE kind IN ('image','pdf') AND encrypted = 0")
+    suspend fun allScannable(): List<AttachmentEntity>
+
     @Upsert
     suspend fun upsert(attachment: AttachmentEntity)
 

@@ -157,6 +157,7 @@ class Strings(val isArabic: Boolean) {
     val ocrPausedDesc = t("أُوقفت تلقائياً لأن محرك القراءة توقف على هذا الهاتف. يمكنك إعادة تفعيلها.", "Paused automatically because the reading engine crashed on this phone. You can turn it back on.")
     val scanDocument = t("مسح مستند", "Scan document")
     val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
+    val ocrNoClearText = t("لم يُعثر على نص واضح في الصورة. للحصول على نتيجة أفضل: صوّر الورقة مستقيمة وقريبة وبإضاءة جيدة.", "No clear text found. For better results, photograph the page straight, close and well lit.")
     val ocrPending = t("جارٍ قراءة النص على الجهاز…", "Reading text on the device…")
     val copy = t("نسخ", "Copy")
     val copied = t("نُسخ النص", "Text copied")

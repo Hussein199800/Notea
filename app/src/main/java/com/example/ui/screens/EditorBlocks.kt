@@ -259,7 +259,8 @@ private fun OcrPanel(vm: EditorViewModel, a: AttachmentEntity, blockId: String, 
     when {
         text.isBlank() -> Text(s.ocrPending, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp))
-        text == OcrWorker.NO_TEXT -> Unit
+        text == OcrWorker.NO_TEXT -> Text(s.ocrNoClearText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp))
         else -> Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
