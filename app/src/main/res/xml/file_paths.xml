@@ -4,4 +4,5 @@
     <files-path name="attachments" path="attachments/" />
     <cache-path name="decrypted" path="decrypted/" />
     <cache-path name="camera" path="camera/" />
+    <cache-path name="updates" path="updates/" />
 </paths>

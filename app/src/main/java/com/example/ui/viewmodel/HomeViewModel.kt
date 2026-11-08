@@ -203,6 +203,13 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
     fun trash(id: String) = io { repo.moveToTrash(uid, id) }
     fun restore(id: String) = io { repo.restoreFromTrash(uid, id) }
     fun deleteForever(id: String) = io { repo.deletePermanently(uid, id) }
+    fun trashMany(ids: Collection<String>) = io { ids.forEach { repo.moveToTrash(uid, it) } }
+    fun restoreMany(ids: Collection<String>) = io { ids.forEach { repo.restoreFromTrash(uid, it) } }
+    fun deleteForeverMany(ids: Collection<String>) = io { ids.forEach { repo.deletePermanently(uid, it) } }
+    fun setPinnedMany(ids: Collection<String>, v: Boolean) = io { ids.forEach { repo.setPinned(uid, it, v) } }
+    fun setFavoriteMany(ids: Collection<String>, v: Boolean) = io { ids.forEach { repo.setFavorite(uid, it, v) } }
+    fun setArchivedMany(ids: Collection<String>, v: Boolean) = io { ids.forEach { repo.setArchived(uid, it, v) } }
+    fun moveManyToFolder(ids: Collection<String>, folderId: String?) = io { ids.forEach { repo.moveToFolder(uid, it, folderId) } }
     fun emptyTrash() = io { repo.emptyTrash(uid) }
     fun setColor(id: String, c: Int) = io { repo.setColor(uid, id, c) }
     fun moveToFolder(id: String, folderId: String?) = io { repo.moveToFolder(uid, id, folderId) }

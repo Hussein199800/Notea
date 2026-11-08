@@ -307,7 +307,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 FileOpener.shareText(context, st.title, (st.title + "\n\n" + text).trim())
                             }
                             MenuItem(Icons.Rounded.Archive, if (st.isArchived) s.unarchive else s.archiveAction) { menu = false; vm.toggleArchive { onClose() } }
-                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash) { menu = false; vm.moveToTrash { session.message(s.movedToTrash); onClose() } }
+                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash) { menu = false; vm.moveToTrash { val id = vm.noteId; session.messageWithUndo(s.movedToTrash) { session.restoreFromTrash(id) }; onClose() } }
                         }
                     }
                 }

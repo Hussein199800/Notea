@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- No broad storage permission: files are read through the Storage Access Framework / share sheet only. -->
 
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -68,6 +71,9 @@
 
         <!-- Native OCR runs isolated: a crash there can't close Notea. -->
         <service android:name=".ocr.OcrService" android:process=":ocr" android:exported="false" />
+        <!-- WorkManager foreground jobs (OCR queue, update download) show a progress notification. -->
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync" tools:node="merge" />
 
         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
         <receiver android:name=".reminders.BootReceiver" android:exported="true">

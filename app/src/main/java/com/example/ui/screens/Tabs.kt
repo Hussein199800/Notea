@@ -33,6 +33,10 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notifications
@@ -352,6 +356,10 @@ fun MoreTab(session: SessionViewModel) {
             PreferenceGroup {
                 ConceptRow(Icons.Rounded.AutoAwesome, Concept.ASSISTANT, s.assistant, s.assistantDesc, onClick = { session.navigate(Screen.AssistantSettings) })
                 ConceptRow(Icons.Rounded.Settings, Concept.ARCHIVE, s.settings, s.settingsDesc, onClick = { session.navigate(Screen.Settings) })
+                ConceptRow(Icons.Rounded.SystemUpdate, Concept.NOTES, s.updates, s.updatesDesc, onClick = { session.navigate(Screen.Update) })
+                ConceptRow(Icons.Rounded.TouchApp, Concept.NOTES, s.tour, s.tourDesc, onClick = { session.startTour() })
+                ConceptRow(Icons.Rounded.NewReleases, Concept.NOTES, s.releases, s.releasesDesc, onClick = { session.navigate(Screen.Releases) })
+                ConceptRow(Icons.Rounded.BugReport, Concept.ARCHIVE, s.diagnostics, s.diagnosticsDesc, onClick = { session.navigate(Screen.Diagnostics) })
                 ConceptRow(Icons.Rounded.Info, Concept.NOTES, s.about, s.versionLabel(com.example.BuildConfig.VERSION_NAME), onClick = { session.navigate(Screen.About) })
             }
         }

@@ -17,12 +17,12 @@ android {
     applicationId = "com.notea.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.1.3"
+    // Version lives in 3 places, checked by VersionMatchTest: here, core/Changelog.kt, release-notes.md.
+    versionName = "1.2.0"
+    // versionCode = version×10 + abi (universal 0, armeabi-v7a 1, arm64-v8a 2); 1.2.0 → 102000.
+    versionCode = noteaBaseCode(versionName!!) * 10
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    // Native OCR libraries for phones only (arm). x86_64 (emulators) is added to debug builds.
-    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
   }
 
   // Release signing: the keystore is NEVER committed. Provide it via keystore.properties
@@ -51,9 +51,19 @@ android {
       signingConfig = signingConfigs.findByName("release")
     }
     debug {
-      ndk { abiFilters += listOf("x86_64") }
+      // Phones (arm) + emulators (x86_64). Release builds use ABI splits instead.
+      ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
       applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
+    }
+  }
+  // Release: one APK per phone ABI + a universal Notea.apk (the fixed download link).
+  splits {
+    abi {
+      isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+      reset()
+      include("armeabi-v7a", "arm64-v8a")
+      isUniversalApk = true
     }
   }
   compileOptions {
@@ -71,6 +81,22 @@ android {
     includeInApk = false
     includeInBundle = true
   }
+}
+
+androidComponents {
+  onVariants { variant ->
+    variant.outputs.forEach { output ->
+      val abi = output.filters.firstOrNull { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
+      val digit = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)[abi] ?: 0
+      output.versionCode.set(noteaBaseCode(android.defaultConfig.versionName!!) * 10 + digit)
+    }
+  }
+}
+
+/** 1.2.0 → 10200 (major×10000 + minor×100 + patch). Mirrors UpdateRules.baseCode. */
+fun noteaBaseCode(v: String): Int {
+  val p = v.substringBefore('-').split('.').map { it.toInt() } + listOf(0, 0)
+  return p[0] * 10000 + p[1] * 100 + p[2]
 }
 
 ksp {

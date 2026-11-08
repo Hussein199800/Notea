@@ -18,6 +18,7 @@ class FileProviderPathsTest {
         listOf(
             File(ctx.cacheDir, "camera/scan_1.jpg"),      // document-scan camera fallback
             File(ctx.cacheDir, "camera/qr.jpg"),          // transfer QR photo
+            File(ctx.cacheDir, "updates/Notea-1.2.0.apk"), // downloaded update handed to the installer
             File(ctx.cacheDir, "decrypted/a.pdf"),        // opening locked attachments
             File(ctx.filesDir, "attachments/u/a")          // opening attachments
         ).forEach { f ->

@@ -65,6 +65,7 @@ class AppContainer(val app: Application) {
     val settings = SettingsStore(app)
     val db: NoteaDatabase = NoteaDatabase.getInstance(app)
     val keyVault = KeyVault(app)
+    val updater by lazy { com.example.core.update.Updater(app, scope) }
     val reminderScheduler = ReminderScheduler(app)
     val attachmentStore = AttachmentStore(app)
 
@@ -147,6 +148,7 @@ class AppContainer(val app: Application) {
             rerunOcrWithBetterModel()
         }
         AutoBackupWorker.schedule(app, settings.state.value.autoBackup)
+        if (app.packageName == com.example.core.update.UpdateRules.PACKAGE) com.example.core.update.UpdateCheckWorker.schedule(app)
     }
 
     /** One-time: text read by the old fast model is discarded and read again with the accurate model + filter. */

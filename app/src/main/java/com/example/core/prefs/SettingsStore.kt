@@ -72,6 +72,10 @@ class SettingsStore(context: Context) {
     fun setLocalMode(on: Boolean) = prefs.edit().putBoolean("local_mode", on).apply()
 
     /** First-run migration wizard was shown (or skipped) for this account. */
+    fun tourDone() = prefs.getBoolean("tour_done", false)
+    fun setTourDone() = prefs.edit().putBoolean("tour_done", true).apply()
+    fun lastSeenVersion(): String? = prefs.getString("whats_new_seen", null)
+    fun setLastSeenVersion(v: String) = prefs.edit().putString("whats_new_seen", v).apply()
     fun onboardingDone(uid: String) = prefs.getBoolean("onboarding_$uid", false)
     fun setOnboardingDone(uid: String) = prefs.edit().putBoolean("onboarding_$uid", true).apply()
 

@@ -112,6 +112,7 @@ class Strings(val isArabic: Boolean) {
     val share = t("مشاركة كنص", "Share as text")
     val movedToTrash = t("نُقلت إلى المحذوفات", "Moved to trash")
     val undo = t("تراجع", "Undo")
+    val movedManyToTrash = { n: Int -> t("نُقلت ${notesCount(n)} إلى المحذوفات", "Moved $n notes to trash") }
     val redo = t("إعادة", "Redo")
     val archived = t("تمت الأرشفة", "Archived")
 
@@ -527,6 +528,76 @@ class Strings(val isArabic: Boolean) {
     val textLarge = t("كبير", "Large")
     val textHuge = t("كبير جداً", "Extra large")
     val restoreDefaults = t("استعادة الافتراضي", "Restore defaults")
+
+    // Tour / what's new / releases / diagnostics
+    val previous = t("السابق", "Back")
+    val startUsing = t("ابدأ", "Start")
+    val stepOf = { a: Int, b: Int -> t("الخطوة ${num(a)} من ${num(b)}", "Step $a of $b") }
+    val tour1Title = t("ملاحظاتك في مكان واحد", "All your notes in one place")
+    val tour1Body = t("اضغط زر + لملاحظة جديدة. يمكنك إضافة نص وقوائم وصور وملفات وتسجيلات في الملاحظة نفسها، ويُحفظ كل شيء تلقائياً.", "Tap + for a new note. Add text, checklists, images, files and recordings in the same note; everything saves automatically.")
+    val tour2Title = t("الضغط المطوّل يحدد", "Long press to select")
+    val tour2Body = t("اضغط مطوّلاً على ملاحظة لتحديدها، ثم اضغط غيرها لتحديد أكثر من واحدة وتثبيتها أو أرشفتها أو حذفها معاً. بعد الحذف يظهر زر «تراجع».", "Long press a note to select it, then tap others to pin, archive or delete them together. After deleting, an Undo button appears.")
+    val tour3Title = t("المهام والتذكيرات", "Tasks & reminders")
+    val tour3Body = t("كل عنصر غير منجز في قوائمك يظهر في تبويب المهام، مع التذكيرات القادمة. أنجز العنصر من هناك مباشرة.", "Every unchecked checklist item shows up in the Tasks tab, next to upcoming reminders. Complete items right there.")
+    val tour4Title = t("المجلدات والوسوم", "Folders & tags")
+    val tour4Body = t("نظّم ملاحظاتك في مجلدات، واكتب #وسم داخل أي ملاحظة. كل رقم في تبويب المجلدات يفتح ملاحظاته.", "Organize notes in folders, and type #tag inside any note. Every number in the Folders tab opens its notes.")
+    val tour5Title = t("خصوصيتك أولاً", "Your privacy first")
+    val tour5Body = t("اقفل أي ملاحظة لتُشفَّر على جهازك. ملاحظاتك تبقى على هاتفك ولا تُرسل لأي جهة إلا إذا طلبت ذلك صراحة.", "Lock any note to encrypt it on your device. Your notes stay on your phone and are never sent anywhere unless you explicitly ask.")
+    val tour6Title = t("المزيد", "More")
+    val tour6Body = t("من تبويب «المزيد»: نقل ملاحظاتك من هاتف آخر، والاستيراد، والنسخ الاحتياطي، والإعدادات، وإعادة هذه الجولة.", "From More: bring notes from another phone, import, backups, settings, and this tour again.")
+    val tour = t("الجولة التعريفية", "Tour")
+    val tourDesc = t("ست خطوات قصيرة عن أهم ما في التطبيق", "Six short steps through the essentials")
+    val whatsNewTitle = { v: String -> t("ما الجديد في الإصدار \u2066${v}\u2069", "What's new in $v") }
+    val allReleases = t("كل الإصدارات", "All releases")
+    val releases = t("الإصدارات", "Releases")
+    val releasesDesc = t("ما تغيّر في كل إصدار", "What changed in each version")
+    val versionLabelShort = { v: String -> t("الإصدار \u2066${v}\u2069", "Version $v") }
+    val currentVersion = t("الحالي", "current")
+    val diagnostics = t("سجل التشخيص", "Diagnostics log")
+    val diagnosticsDesc = t("آخر ${num(50)} حدثاً، تُخفى فيه البيانات الحساسة", "Last 50 events, sensitive data masked")
+    val diagnosticsIntro = t("يحفظ التطبيق هنا آخر ${num(50)} خطأ أو حدث في الخلفية على جهازك فقط. تُخفى البريد والمفاتيح والأرقام الطويلة والمسارات. انسخه وأرسله للمطوّر عند الإبلاغ عن مشكلة.",
+        "The app keeps the last 50 errors or background events here, on your device only. E-mails, keys, long numbers and paths are masked. Copy it and send it to the developer when reporting a problem.")
+    val diagnosticsEmpty = t("لا أحداث مسجّلة. كل شيء يعمل.", "Nothing logged. Everything is working.")
+    val copyAll = t("نسخ الكل", "Copy all")
+    val clearLog = t("مسح السجل", "Clear log")
+    val clearLogConfirm = t("سيُحذف السجل من هذا الجهاز.", "The log will be deleted from this device.")
+
+    // Updates
+    val updates = t("التحقق من التحديثات", "Check for updates")
+    val updatesDesc = t("من GitHub كل ${num(12)} ساعة، أو الآن يدوياً", "From GitHub every 12 hours, or manually now")
+    val installedVersion = { v: String -> t("الإصدار المثبّت: \u2066${v}\u2069", "Installed version: $v") }
+    val checkingUpdates = t("جارٍ التحقق من وجود إصدار أحدث…", "Checking for a newer version…")
+    val upToDate = t("لديك أحدث إصدار", "You have the latest version")
+    val lastChecked = { r: String -> t("آخر تحقق: ${r}", "Last checked: $r") }
+    val checkAgain = t("تحقق مجدداً", "Check again")
+    val updateAvailable = { v: String -> t("الإصدار \u2066${v}\u2069 متاح", "Version $v is available") }
+    val downloadSize = { b: Long -> t("حجم التنزيل: ${mb(b)}", "Download size: ${mb(b)}") }
+    val downloadUpdate = t("تنزيل التحديث", "Download update")
+    val downloading = { v: String -> t("جارٍ تنزيل الإصدار \u2066${v}\u2069…", "Downloading $v…") }
+    val progressPercent = { p: Int -> t("${num(p)}٪", "$p%") }
+    val updateVerified = t("نُزّل التحديث وتأكدنا من توقيعه", "Downloaded and signature verified")
+    val installHint = t("سيفتح Android شاشة التثبيت. ملاحظاتك تبقى كما هي.", "Android will open the installer. Your notes stay as they are.")
+    val installPermissionHint = t("يحتاج Android إذنك مرة واحدة ليسمح لـ Notea بتثبيت التحديثات. فعّل «السماح من هذا المصدر» ثم ارجع.", "Android needs your permission once to let Notea install updates. Turn on \"Allow from this source\", then come back.")
+    val installNow = t("تثبيت الآن", "Install now")
+    val allowAndInstall = t("منح الإذن ثم التثبيت", "Allow, then install")
+    val signatureMismatchTitle = t("التوقيع لا يطابق النسخة المثبّتة", "The signature doesn't match the installed app")
+    val signatureMismatchBody = t("الملف المنزّل موقّع بمفتاح مختلف عن نسختك الحالية، لذلك لم نثبّته حفاظاً على أمانك. يحدث هذا إن كانت نسختك من مصدر آخر. الحل: احفظ نسخة احتياطية من «المزيد ← النسخ الاحتياطي»، ثم احذف التطبيق وثبّت النسخة الرسمية من الرابط الثابت، ثم استعد النسخة.",
+        "The downloaded file is signed with a different key than your current app, so it was not installed for your safety. This happens when your copy came from another source. Fix: make a backup from More → Backup, uninstall, install the official build from the fixed link, then restore.")
+    val openFixedLink = t("فتح الرابط الثابت", "Open the fixed link")
+    val openReleasesPage = t("صفحة الإصدارات على GitHub", "Releases page on GitHub")
+    val updateAutoInfo = t("يتحقق Notea تلقائياً كل ${num(12)} ساعة عند الاتصال بالإنترنت ويُعلمك بإشعار. لا يُنزَّل أو يُثبَّت شيء دون ضغطك.", "Notea checks automatically every 12 hours when online and notifies you. Nothing is downloaded or installed without your tap.")
+    fun mb(bytes: Long): String = if (isArabic) "\u2068" + String.format(java.util.Locale.US, "%.1f", bytes / 1_048_576.0) + "\u2069 م.ب" else String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    fun updateError(r: com.example.core.update.Updater.Reason): Pair<String, String> = when (r) {
+        com.example.core.update.Updater.Reason.OFFLINE -> t("لا يوجد اتصال بالإنترنت", "No internet connection") to t("اتصل بشبكة Wi-Fi أو بيانات الجوال ثم اضغط «إعادة المحاولة».", "Connect to Wi-Fi or mobile data, then tap Retry.")
+        com.example.core.update.Updater.Reason.NO_RELEASE -> t("لا يوجد إصدار منشور بعد", "No published release yet") to t("لم يُنشر أي إصدار على GitHub حتى الآن، أو المستودع خاص. ستصلك رسالة عند نشر إصدار.", "Nothing has been published on GitHub yet, or the repository is private. You'll be notified when a release is out.")
+        com.example.core.update.Updater.Reason.NO_APK -> t("الإصدار لا يحتوي ملف تثبيت", "The release has no APK") to t("افتح صفحة الإصدارات ونزّل الملف يدوياً، أو حاول لاحقاً.", "Open the releases page and download it manually, or try later.")
+        com.example.core.update.Updater.Reason.SERVER -> t("تعذّر الوصول إلى GitHub", "Couldn't reach GitHub") to t("قد يكون الخادم مشغولاً. حاول بعد دقائق.", "The server may be busy. Try again in a few minutes.")
+        com.example.core.update.Updater.Reason.STORAGE -> t("المساحة غير كافية", "Not enough storage") to t("احذف بعض الملفات من الهاتف ثم أعد المحاولة.", "Free up some space on the phone, then retry.")
+        com.example.core.update.Updater.Reason.WRONG_PACKAGE -> t("الملف ليس تطبيق Notea", "The file isn't Notea") to t("لم يُثبَّت شيء. نزّل من صفحة الإصدارات الرسمية.", "Nothing was installed. Download from the official releases page.")
+        com.example.core.update.Updater.Reason.NOT_NEWER -> t("الملف ليس أحدث من نسختك", "The file isn't newer than your version") to t("لديك هذا الإصدار أو أحدث منه.", "You already have this version or newer.")
+        com.example.core.update.Updater.Reason.UNREADABLE -> t("الملف المنزّل تالف", "The downloaded file is damaged") to t("أعد التنزيل؛ قد يكون الاتصال انقطع.", "Download again; the connection may have dropped.")
+        com.example.core.update.Updater.Reason.DEBUG_BUILD -> t("هذه نسخة تجريبية", "This is a test build") to t("التحديث التلقائي متاح في النسخة الرسمية فقط، وليس في النسخ التجريبية.", "Automatic updates are only available in the official build, not in test builds.")
+    }
 
     // Main tabs
     val tabNotes = t("الملاحظات", "Notes")

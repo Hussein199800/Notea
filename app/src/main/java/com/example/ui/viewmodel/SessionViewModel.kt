@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class UiMessage(val text: String, val undo: (() -> Unit)? = null)
+
 enum class MainTab { NOTES, TASKS, FOLDERS, MORE }
 
 sealed interface Screen {
@@ -32,6 +34,9 @@ sealed interface Screen {
     data class Welcome(val firstRun: Boolean) : Screen
     data object Transfer : Screen
     data object AssistantSettings : Screen
+    data object Releases : Screen
+    data object Diagnostics : Screen
+    data object Update : Screen
 }
 
 /** Shared incoming content from Android share sheet / widgets / notifications. */
@@ -40,6 +45,7 @@ sealed interface IncomingIntent {
     data class SharedFiles(val uris: List<android.net.Uri>) : IncomingIntent
     data class OpenNote(val noteId: String) : IncomingIntent
     data object NewNote : IncomingIntent
+    data object OpenUpdate : IncomingIntent
     data class NewNoteWithText(val title: String, val body: String) : IncomingIntent
 }
 
@@ -72,7 +78,7 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
     val pendingSync = container.repository.observePendingSyncCount(uid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
 
     /** Notes unlocked (PIN verified) during this session; cleared on app lock. */
@@ -109,7 +115,10 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
     fun startRealtimeSync() = if (!online) Unit else runCatching { container.syncEngine.startListening(uid, container.scope) }
     fun stopRealtimeSync() = if (!online) Unit else runCatching { container.syncEngine.stopListening() }
 
-    fun message(m: String) { _messages.tryEmit(m) }
+    fun message(m: String) { _messages.tryEmit(UiMessage(m)) }
+    fun restoreFromTrash(noteId: String) { viewModelScope.launch(Dispatchers.IO) { container.repository.restoreFromTrash(uid, noteId) } }
+    /** Snackbar with an Undo action (used after every delete/move to trash). */
+    fun messageWithUndo(m: String, undo: () -> Unit) { _messages.tryEmit(UiMessage(m, undo)) }
 
     // ------------------------------------------------------------------ navigation
     /** One ViewModelStore per open editor: survives rotation, cleared (and flushed) when the note leaves the stack. */
@@ -257,14 +266,31 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
 
     private fun vaultNeedsOnlineMsg() = if (container.isArabic()) "يلزم اتصال بالإنترنت لإنشاء الخزنة أول مرة" else "An internet connection is needed to create the vault the first time"
 
-    fun markOnboarded() = settings.setOnboardingDone(uid)
+    fun markOnboarded() { settings.setOnboardingDone(uid); evaluatePrompts() }
+
+    /** First-run tour (5–7 steps) or «ما الجديد» after an update — at most one, once. */
+    enum class HelpPrompt { TOUR, WHATS_NEW }
+    private val _help = MutableStateFlow<HelpPrompt?>(null)
+    val help: StateFlow<HelpPrompt?> = _help.asStateFlow()
+    private fun evaluatePrompts() {
+        val current = com.example.core.Changelog.current.version
+        _help.value = when {
+            !settings.tourDone() -> HelpPrompt.TOUR
+            settings.lastSeenVersion() != current -> HelpPrompt.WHATS_NEW
+            else -> null
+        }
+    }
+    fun startTour() { _help.value = HelpPrompt.TOUR }
+    fun dismissHelp() {
+        settings.setTourDone(); settings.setLastSeenVersion(com.example.core.Changelog.current.version); _help.value = null
+    }
 
     /** First run on this account with no notes yet: open the migration center once. */
     fun maybeShowWelcome() = viewModelScope.launch(Dispatchers.IO) {
-        if (settings.onboardingDone(uid)) return@launch
+        if (settings.onboardingDone(uid)) { kotlinx.coroutines.withContext(Dispatchers.Main) { evaluatePrompts() }; return@launch }
         if (container.db.noteDao().getAllWithDetails(uid).isEmpty()) {
             kotlinx.coroutines.withContext(Dispatchers.Main) { if (_stack.value == listOf(Screen.Home)) navigate(Screen.Welcome(firstRun = true)) }
-        } else settings.setOnboardingDone(uid)
+        } else { settings.setOnboardingDone(uid); kotlinx.coroutines.withContext(Dispatchers.Main) { evaluatePrompts() } }
     }
 
     fun syncNow() { if (online) SyncWorker.enqueue(container.app, uid, 0) }

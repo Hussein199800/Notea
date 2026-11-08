@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
@@ -142,10 +143,15 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
     val scope = rememberCoroutineScope()
 
     var actionsFor by remember { mutableStateOf<NoteCardModel?>(null) }
+    // Multi-select: long press starts it, taps add/remove, back or ✕ ends it.
+    var selection by remember { mutableStateOf(emptySet<String>()) }
+    fun toggle(id: String) { selection = if (id in selection) selection - id else selection + id }
+    androidx.compose.runtime.LaunchedEffect(filter.view, filter.folderId, filter.tagId) { selection = emptySet() }
     var unlockFor by remember { mutableStateOf<NoteCardModel?>(null) }
     var showTemplates by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var confirmEmptyTrash by remember { mutableStateOf(false) }
+    var confirmDeleteMany by remember { mutableStateOf<List<String>?>(null) }
 
     val deviceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val target = unlockFor
@@ -177,6 +183,8 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
         if (filter.query.isNotEmpty()) vm.setFilter { it.copy(query = "") } else vm.showView(HomeView.ALL)
     }
 
+    androidx.activity.compose.BackHandler(enabled = selection.isNotEmpty()) { selection = emptySet() }
+
     run {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -201,6 +209,27 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                             Icon(Icons.Rounded.Tune, s.filters, tint = if (filter.hasRefinements) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+                if (selection.isNotEmpty()) {
+                    val all = state.pinned + state.others
+                    val picked = all.filter { it.note.id in selection }
+                    val ids = picked.map { it.note.id }
+                    SelectionBar(
+                        count = picked.size, inTrash = filter.view == HomeView.TRASH,
+                        allPinned = picked.all { it.note.isPinned }, allFavorite = picked.all { it.note.isFavorite }, allArchived = picked.all { it.note.isArchived },
+                        onClose = { selection = emptySet() },
+                        onSelectAll = { selection = all.map { it.note.id }.toSet() },
+                        onPin = { vm.setPinnedMany(ids, !picked.all { it.note.isPinned }); selection = emptySet() },
+                        onFavorite = { vm.setFavoriteMany(ids, !picked.all { it.note.isFavorite }); selection = emptySet() },
+                        onArchive = { vm.setArchivedMany(ids, !picked.all { it.note.isArchived }); selection = emptySet() },
+                        onTrash = {
+                            vm.trashMany(ids); selection = emptySet()
+                            session.messageWithUndo(if (ids.size == 1) s.movedToTrash else s.movedManyToTrash(ids.size)) { vm.restoreMany(ids) }
+                        },
+                        onRestore = { vm.restoreMany(ids); selection = emptySet() },
+                        onDeleteForever = { confirmDeleteMany = ids },
+                        onMore = if (picked.size == 1) ({ actionsFor = picked.first(); selection = emptySet() }) else null
+                    )
                 }
                 // Title row
                 val filtered = filter.folderId != null || filter.tagId != null || filter.view !in setOf(HomeView.ALL, HomeView.FAVORITES)
@@ -265,12 +294,14 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         if (state.pinned.isNotEmpty()) {
                             item(span = StaggeredGridItemSpan.FullLine) { Header(s.pinned) }
                             items(state.pinned, key = { it.note.id }) { m ->
-                                NoteCard(m, m.note.id == selectedNoteId, Modifier.animateItem(), onClick = { open(m) }, onLongClick = { actionsFor = m })
+                                NoteCard(m, m.note.id == selectedNoteId || m.note.id in selection, Modifier.animateItem(),
+                                onClick = { if (selection.isNotEmpty()) toggle(m.note.id) else open(m) }, onLongClick = { toggle(m.note.id) })
                             }
                             item(span = StaggeredGridItemSpan.FullLine) { Header(s.others) }
                         }
                         items(state.others, key = { it.note.id }) { m ->
-                            NoteCard(m, m.note.id == selectedNoteId, Modifier.animateItem(), onClick = { open(m) }, onLongClick = { actionsFor = m })
+                            NoteCard(m, m.note.id == selectedNoteId || m.note.id in selection, Modifier.animateItem(),
+                                onClick = { if (selection.isNotEmpty()) toggle(m.note.id) else open(m) }, onLongClick = { toggle(m.note.id) })
                         }
                     }
                 }
@@ -305,6 +336,9 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                 onDismiss = { if (unlockFor?.note?.id == m.note.id) unlockFor = null }
             )
         }
+    }
+    confirmDeleteMany?.let { ids ->
+        ConfirmDialog(s.deleteForever, s.deleteForeverConfirm, s.deleteForever, true, { vm.deleteForeverMany(ids); selection = emptySet() }) { confirmDeleteMany = null }
     }
     if (confirmEmptyTrash) ConfirmDialog(s.emptyTrash, s.emptyTrashConfirm, s.deleteForever, true, { vm.emptyTrash() }) { confirmEmptyTrash = false }
 
@@ -389,7 +423,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         vm.plainTextForShare(m.details)?.let { FileOpener.shareText(context, m.note.title, it) }; close()
                     }
                     SheetRow(if (m.note.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (m.note.isArchived) s.unarchive else s.archiveAction) { vm.toggleArchive(m); close() }
-                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash) { vm.trash(m.note.id); session.message(s.movedToTrash); close() }
+                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash) { val id = m.note.id; vm.trash(id); session.messageWithUndo(s.movedToTrash) { vm.restore(id) }; close() }
                 }
             }
         }
@@ -440,6 +474,38 @@ private fun MemoryCard(m: com.example.core.memory.NoteMemory.Resurface, onOpen: 
                 TextButton(onClick = onOpen) { Text(s.open) }
                 TextButton(onClick = onHide) { Text(s.hideToday) }
             }
+        }
+    }
+}
+
+/** Top bar shown while notes are selected (long press). Every action applies to all selected notes. */
+@Composable
+private fun SelectionBar(
+    count: Int, inTrash: Boolean, allPinned: Boolean, allFavorite: Boolean, allArchived: Boolean,
+    onClose: () -> Unit, onSelectAll: () -> Unit, onPin: () -> Unit, onFavorite: () -> Unit, onArchive: () -> Unit,
+    onTrash: () -> Unit, onRestore: () -> Unit, onDeleteForever: () -> Unit, onMore: (() -> Unit)?
+) {
+    val s = LocalStrings.current
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, s.cancel) }
+            Text(s.selectedCount(count), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+            IconButton(onClick = onSelectAll) { Icon(Icons.Rounded.SelectAll, s.selectAll) }
+          }
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            if (inTrash) {
+                IconButton(onClick = onRestore) { Icon(Icons.Rounded.Restore, s.restore) }
+                IconButton(onClick = onDeleteForever) { Icon(Icons.Rounded.DeleteForever, s.deleteForever, tint = MaterialTheme.colorScheme.error) }
+            } else {
+                IconButton(onClick = onPin) { Icon(Icons.Rounded.PushPin, if (allPinned) s.unpin else s.pin, tint = if (allPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+                IconButton(onClick = onFavorite) { Icon(if (allFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (allFavorite) s.unfavorite else s.favorite) }
+                IconButton(onClick = onArchive) { Icon(if (allArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (allArchived) s.unarchive else s.archiveAction) }
+                IconButton(onClick = onTrash) { Icon(Icons.Rounded.DeleteOutline, s.moveToTrash) }
+                if (onMore != null) IconButton(onClick = onMore) { Icon(Icons.Rounded.MoreVert, s.more) }
+            }
+          }
         }
     }
 }

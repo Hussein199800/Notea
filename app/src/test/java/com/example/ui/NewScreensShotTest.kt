@@ -9,6 +9,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.core.app.ApplicationProvider
 import com.example.AppContainer
@@ -110,5 +115,61 @@ class NewScreensShotTest {
         val data = com.example.ui.viewmodel.DataViewModel(container, LOCAL_UID)
         rule.setContent { Frame(arabic = false, dark = true) { com.example.ui.screens.TransferScreen(session, data) } }
         save("transfer_en_dark")
+    }
+
+    private fun saveDialog(name: String) {
+        rule.waitForIdle()
+        val dir = System.getenv("NOTEA_SHOTS") ?: return
+        val view = org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView
+        val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        rule.runOnUiThread { view.draw(android.graphics.Canvas(bmp)) }
+        File(dir).mkdirs(); File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+    @Test fun tour_ar() {
+        rule.setContent { Frame { com.example.ui.screens.TourDialog {} } }
+        saveDialog("tour_ar_1")
+        rule.onNodeWithText("التالي").performClick()
+        saveDialog("tour_ar_2")
+        org.junit.Assert.assertTrue(rule.onAllNodesWithText("الخطوة", substring = true).fetchSemanticsNodes().isNotEmpty())
+    }
+    @Test fun whatsNew_ar() { rule.setContent { Frame { com.example.ui.screens.WhatsNewDialog({}) {} } }; saveDialog("whatsnew_ar") }
+    @Test fun releases_ar() { val session = SessionViewModel(container, LOCAL_UID); rule.setContent { Frame { com.example.ui.screens.ReleasesScreen(session) } }; save("releases_ar") }
+    @Test fun diagnostics_ar_dark() {
+        com.example.core.Diagnostics.clear(app)
+        com.example.core.Diagnostics.log(app, "sync", "Upload incomplete for husseintaweel1@example.com; will retry")
+        com.example.core.Diagnostics.log(app, "ocr", "Text recognition engine stopped on one image (skipped)", RuntimeException("SIGSEGV at /data/user/0/x"))
+        val session = SessionViewModel(container, LOCAL_UID)
+        rule.setContent { Frame(dark = true) { com.example.ui.screens.DiagnosticsScreen(session) } }
+        save("diagnostics_ar_dark")
+        // Masking applied before writing.
+        org.junit.Assert.assertTrue(com.example.core.Diagnostics.read(app).none { it.contains("@example.com") || it.contains("/data/user") })
+    }
+    @Test fun update_ar() { val session = SessionViewModel(container, LOCAL_UID); rule.setContent { Frame { com.example.ui.screens.UpdateScreen(session) } }; save("update_ar") }
+    @Test fun settings_ar() {
+        val session = SessionViewModel(container, LOCAL_UID)
+        rule.setContent { Frame { com.example.ui.screens.SettingsScreen(session, null, onSignOut = {}, onSignIn = null) } }
+        save("settings_ar")
+    }
+
+    @Test fun textScale_persistsAcrossRestart() {
+        container.settings.update { it.copy(textScale = 1.15f) }
+        val reopened = com.example.core.prefs.SettingsStore(app)
+        org.junit.Assert.assertEquals(1.15f, reopened.state.value.textScale)
+        container.settings.update { it.copy(textScale = 1f) }
+    }
+
+    @Test fun tourShownOnceThenWhatsNewOnlyAfterUpdate() {
+        val st = container.settings
+        app.getSharedPreferences("arabic_notes_prefs", 0).edit().remove("tour_done").remove("whats_new_seen").putBoolean("onboarding_$LOCAL_UID", true).commit()
+        val session = SessionViewModel(container, LOCAL_UID)
+        session.markOnboarded()
+        org.junit.Assert.assertEquals(SessionViewModel.HelpPrompt.TOUR, session.help.value)
+        session.dismissHelp()
+        org.junit.Assert.assertNull(session.help.value)
+        session.markOnboarded()
+        org.junit.Assert.assertNull(session.help.value)
+        st.setLastSeenVersion("1.1.3")   // simulate an update
+        session.markOnboarded()
+        org.junit.Assert.assertEquals(SessionViewModel.HelpPrompt.WHATS_NEW, session.help.value)
     }
 }

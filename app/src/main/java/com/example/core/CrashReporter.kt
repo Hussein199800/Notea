@@ -24,6 +24,7 @@ object CrashReporter {
                 val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
                 file(c).apply { parentFile?.mkdirs() }.writeText(header(c) + "Thread: ${t.name}\n\n" + sw.toString().take(20_000))
             }
+            runCatching { Diagnostics.log(c, "crash", "Thread ${t.name}", e) }
             previous?.uncaughtException(t, e)
         }
     }

@@ -142,7 +142,13 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
         lifecycle.lifecycle.addObserver(obs)
         onDispose { lifecycle.lifecycle.removeObserver(obs) }
     }
-    LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(session) {
+        session.messages.collect { m ->
+            val r = snackbar.showSnackbar(m.text, actionLabel = if (m.undo != null) s.undo else null, withDismissAction = m.undo != null,
+                duration = if (m.undo != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) m.undo?.invoke()
+        }
+    }
     LaunchedEffect(session) { session.maybeShowWelcome() }
 
     // Share sheet / widget / notification entry points.
@@ -160,6 +166,7 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     val note = container.db.noteDao().getNote(intent.noteId)
                     if (note != null && (!note.isLocked || session.isOpened(note.id))) { session.home(); session.navigate(Screen.Editor(note.id)) } else session.home()
                 }
+                IncomingIntent.OpenUpdate -> { session.home(); session.navigate(Screen.Update) }
                 IncomingIntent.NewNote -> home.createNote({ NoteDraft(id = it) }) { id -> session.home(); session.navigate(Screen.Editor(id, isNew = true)) }
                 is IncomingIntent.NewNoteWithText -> home.createNote({ NoteDraft(id = it, title = intent.title, body = intent.body) }) { id -> session.navigate(Screen.Editor(id)) }
             }
@@ -219,8 +226,17 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     is Screen.Welcome -> com.example.ui.screens.WelcomeScreen(session, screen.firstRun) { session.markOnboarded(); session.back() }
                     Screen.Transfer -> com.example.ui.screens.TransferScreen(session, data)
                     Screen.AssistantSettings -> com.example.ui.screens.AssistantSettingsScreen(session)
+                    Screen.Releases -> com.example.ui.screens.ReleasesScreen(session)
+                    Screen.Diagnostics -> com.example.ui.screens.DiagnosticsScreen(session)
+                    Screen.Update -> com.example.ui.screens.UpdateScreen(session)
                 }
             }
+        }
+        val help by session.help.collectAsState()
+        if (top is Screen.Home) when (help) {
+            SessionViewModel.HelpPrompt.TOUR -> com.example.ui.screens.TourDialog { session.dismissHelp() }
+            SessionViewModel.HelpPrompt.WHATS_NEW -> com.example.ui.screens.WhatsNewDialog(onAll = { session.dismissHelp(); session.navigate(Screen.Releases) }) { session.dismissHelp() }
+            null -> Unit
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
             .padding(bottom = if (top is Screen.Home && !railNav && !wide) 80.dp else 0.dp))

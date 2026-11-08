@@ -26,3 +26,20 @@
 - Versions: named versions (label) are never trimmed; diff via `TextDiff`.
 - Phone-to-phone transfer: raw TCP on the LAN, payload is a password-encrypted backup, the one-time code is the password.
 - AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, one note per request, input capped at 12k chars; no whole-library AI features (token cost). Notea Memory is on-device (no AI).
+
+## Owner's work standard (v1.2 — apply to all future work)
+- Replies to the owner: Arabic only, short, direct, practical. Questions via the options tool in Arabic, recommended option first.
+- Never push to `main` without the owner's approval and a new version number. Work on the designated branch.
+- Understand the project before changing it; never remove a feature or change behaviour without reason + approval. Implement, don't just suggest; prefer the simplest solution.
+- Navigation: 4 tabs (الملاحظات، المهام والتذكيرات، المجلدات والوسوم، المزيد) — `ui/screens/Tabs.kt`. Bottom bar on phones, rail when wide; two balanced columns when width ≥ 700dp (`TabPage`).
+- Sizes: verify 320dp, 390dp, phone landscape, tablet portrait (phone layout scaled to a 560dp canvas, `ScaledLayout`/`tabletScale`), tablet landscape. Touch targets ≥ 44dp. Text size setting multiplies fontScale.
+- Colours: one fixed colour per concept (`ui/theme/Concepts.kt`); vivid g1/g2 only under icons, text colours keep ≥ 4.5:1 (tested).
+- Arabic: Latin digits (`ar-u-nu-latn`), numbers isolated with U+2068/U+2069 (`Strings.num`), Latin versions/dates/paths inside Arabic wrapped in U+2066…U+2069; Arabic count forms via `countAr`/`notesCount`; numeric inputs accept ٠-٩ ۰-۹ «٫» (`core/text/Digits`).
+- Interaction: every number opens its list and has ⓘ (`InfoButton`) when its meaning isn't obvious; «محفوظ ✓» after a setting changes (`SavedTick`); errors = cause + fix; delete → Undo snackbar (`messageWithUndo`), permanent delete → confirm; long press = multi-select; back clears search/filter, then returns to the notes tab.
+- Settings: real value, one-line explanation with the default, persisted, applied immediately, «استعادة الافتراضي».
+- Help: tour (6 steps, re-run from «المزيد»), «ما الجديد» once per version, releases page. Diagnostics log = last 50 events, masked (`core/Diagnostics.mask`).
+- Version lives in 3 places — `app/build.gradle.kts` versionName, `core/Changelog.kt` (newest first), `release-notes.md` (first line `# Notea <version>`) — enforced by `UpdateAndVersionTest`. versionCode = (major×10000+minor×100+patch)×10 + abi (universal 0, armeabi-v7a 1, arm64-v8a 2).
+- Updates: GitHub releases of Hussein199800/Notea, checked every 12h + manually; per-ABI APK, universal `Notea.apk` = fixed link `releases/latest/download/Notea.apk`; installer opened only after package/newer/signature checks (`core/update/UpdateRules`).
+- CI (`.github/workflows/android.yml`): tests on every push; signed per-ABI release only with the NOTEA_* secrets; publishes on `main` once per version; debug builds are never published; the key is never uploaded.
+- Background: heavy work goes through WorkManager; OCR runs as a single serial queue with a foreground progress notification.
+- Before any push: all unit tests + `assembleRelease`, screenshots reviewed by eye. Never claim a test that wasn't run.
