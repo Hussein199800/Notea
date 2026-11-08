@@ -18,7 +18,9 @@ data class AppPrefs(
     val autoLock: AutoLockTimeout = AutoLockTimeout.IMMEDIATELY,
     val gridView: Boolean = true,
     val sort: NoteSort = NoteSort.MODIFIED,
-    val autoBackup: Boolean = true
+    val autoBackup: Boolean = true,
+    /** Text size multiplier: 0.9 / 1.0 / 1.15 / 1.3. */
+    val textScale: Float = 1f
 )
 
 /** Device-local preferences. Keeps the v1 keys (`lang_pref`, `theme_mode`, `auto_lock_timeout`). */
@@ -36,7 +38,8 @@ class SettingsStore(context: Context) {
         autoLock = enumPref("auto_lock_timeout", AutoLockTimeout.IMMEDIATELY),
         gridView = prefs.getBoolean("grid_view", true),
         sort = enumPref("sort", NoteSort.MODIFIED),
-        autoBackup = prefs.getBoolean("auto_backup", true)
+        autoBackup = prefs.getBoolean("auto_backup", true),
+        textScale = prefs.getFloat("text_scale", 1f).coerceIn(0.8f, 1.5f)
     )
 
     fun update(change: (AppPrefs) -> AppPrefs) {
@@ -48,6 +51,7 @@ class SettingsStore(context: Context) {
             .putBoolean("grid_view", n.gridView)
             .putString("sort", n.sort.name)
             .putBoolean("auto_backup", n.autoBackup)
+            .putFloat("text_scale", n.textScale)
             .apply()
         _state.value = n
     }

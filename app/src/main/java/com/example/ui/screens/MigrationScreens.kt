@@ -210,9 +210,9 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
                         Text(s.enterManually, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(address, { address = it.replace("\n", "") }, label = { Text(s.transferAddress) }, placeholder = { Text("192.168.1.5:40123") },
+                                OutlinedTextField(address, { address = com.example.core.text.Digits.latin(it.replace("\n", "")) }, label = { Text(s.transferAddress) }, placeholder = { Text("192.168.1.5:40123") },
                                     maxLines = 2, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(code, { code = it.uppercase().replace("\n", "") }, label = { Text(s.transferCode) }, placeholder = { Text("ABCD-EFGH-JKLM") },
+                                OutlinedTextField(code, { code = com.example.core.text.Digits.latin(it.uppercase().replace("\n", "")) }, label = { Text(s.transferCode) }, placeholder = { Text("ABCD-EFGH-JKLM") },
                                     maxLines = 2, modifier = Modifier.fillMaxWidth())
                             }
                         }

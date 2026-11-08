@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Attachment
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Star
@@ -168,7 +169,9 @@ fun PreferenceRow(
 
 @Composable
 fun SwitchRow(icon: ImageVector?, title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    PreferenceRow(icon, title, subtitle, onClick = { onChange(!checked) }) { Switch(checked, onCheckedChange = onChange) }
+    PreferenceRow(icon, title, subtitle, onClick = { onChange(!checked) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) { SavedTick(checked); Switch(checked, onCheckedChange = onChange) }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -351,8 +354,8 @@ fun SetPinDialog(title: String, withHint: Boolean, onSet: (pin: String, hint: St
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SecretField(pin, { if (it.length <= 8 && it.all(Char::isDigit)) pin = it }, s.newPin, numeric = true)
-                SecretField(confirmPin, { if (it.length <= 8 && it.all(Char::isDigit)) confirmPin = it }, s.confirmPin, numeric = true, isError = error != null)
+                SecretField(pin, { com.example.core.text.Digits.pin(it)?.let { v -> pin = v } }, s.newPin, numeric = true)
+                SecretField(confirmPin, { com.example.core.text.Digits.pin(it)?.let { v -> confirmPin = v } }, s.confirmPin, numeric = true, isError = error != null)
                 if (withHint) OutlinedTextField(hint, { hint = it.take(60).replace("\n", " ") }, label = { Text(s.pinHint) }, maxLines = 3, modifier = Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
@@ -384,7 +387,7 @@ fun VerifyPinDialog(title: String, hint: String?, verify: suspend (String) -> Bo
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SecretField(pin, { if (it.length <= 8 && it.all(Char::isDigit)) { pin = it; error = false } }, s.enterPin, numeric = true, isError = error)
+                SecretField(pin, { com.example.core.text.Digits.pin(it)?.let { v -> pin = v; error = false } }, s.enterPin, numeric = true, isError = error)
                 if (error) Text(s.wrongPin, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 if (!hint.isNullOrBlank()) Text(s.hintLabel(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (onDeviceCredential != null) TextButton(onClick = onDeviceCredential, contentPadding = PaddingValues(0.dp)) { Text(s.useDeviceLock) }
@@ -449,5 +452,48 @@ fun PassphraseDialog(create: Boolean, title: String, body: String, submit: suspe
 fun Pill(text: String, color: Color = MaterialTheme.colorScheme.secondaryContainer, onClick: (() -> Unit)? = null) {
     Surface(shape = RoundedCornerShape(50), color = color, modifier = if (onClick != null) Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick) else Modifier) {
         Text(text, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/** Rounded square with the concept's vivid gradient and a white icon (no text on it). */
+@Composable
+fun ConceptIcon(icon: ImageVector, concept: com.example.ui.theme.Concept, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 40.dp) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(size * 0.32f))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(concept.g1, concept.g2))),
+        contentAlignment = Alignment.Center
+    ) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(size * 0.55f)) }
+}
+
+/** ⓘ next to a number: explains where it comes from and how it was computed. */
+@Composable
+fun InfoButton(title: String, explanation: String) {
+    val s = LocalStrings.current
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }, modifier = Modifier.size(44.dp)) {
+        Icon(Icons.Rounded.Info, s.explain, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        icon = { Icon(Icons.Rounded.Info, null) },
+        title = { Text(title) },
+        text = { ExpandableText(explanation, collapsedLines = 10) },
+        confirmButton = { TextButton(onClick = { open = false }) { Text(s.ok) } }
+    )
+}
+
+/** "Saved ✓" shown for a moment after a setting changes. [key] changes on every save. */
+@Composable
+fun SavedTick(key: Any?) {
+    val s = LocalStrings.current
+    var visible by remember { mutableStateOf(false) }
+    var first by remember { mutableStateOf(true) }
+    androidx.compose.runtime.LaunchedEffect(key) {
+        if (first) { first = false; return@LaunchedEffect }
+        visible = true; kotlinx.coroutines.delay(1600); visible = false
+    }
+    androidx.compose.animation.AnimatedVisibility(visible, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
+        Text(s.saved, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 6.dp))
     }
 }

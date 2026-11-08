@@ -59,7 +59,6 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.ViewQuilt
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,14 +69,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -144,7 +139,6 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
     val tags by vm.tags.collectAsState()
     val prefs by session.prefs.collectAsState()
     val memory by vm.memory.collectAsState()
-    val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     var actionsFor by remember { mutableStateOf<NoteCardModel?>(null) }
@@ -152,9 +146,6 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
     var showTemplates by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var confirmEmptyTrash by remember { mutableStateOf(false) }
-    var folderDialog by remember { mutableStateOf<FolderEntity?>(null) }
-    var newFolderDialog by remember { mutableStateOf(false) }
-    var folderMenu by remember { mutableStateOf<FolderEntity?>(null) }
 
     val deviceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val target = unlockFor
@@ -180,51 +171,13 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
         }
     }
 
-    ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-        ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-            LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
-                item {
-                    Row(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        NoteaMark(Modifier.size(36.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text(s.appName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                fun close() = scope.launch { drawer.close() }
-                item {
-                    DrawerItem(Icons.Rounded.Notes, s.allNotes, filter.view == HomeView.ALL && filter.folderId == null && filter.tagId == null) { vm.showView(HomeView.ALL); close() }
-                    DrawerItem(Icons.Rounded.Star, s.favorites, filter.view == HomeView.FAVORITES) { vm.showView(HomeView.FAVORITES); close() }
-                    DrawerItem(Icons.Rounded.Notifications, s.reminders, filter.view == HomeView.REMINDERS) { vm.showView(HomeView.REMINDERS); close() }
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.folders, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { newFolderDialog = true }) { Icon(Icons.Rounded.Add, s.newFolder) }
-                    }
-                }
-                items(folders, key = { it.id }) { f ->
-                    Box {
-                        DrawerItem(Icons.Rounded.Folder, f.name, filter.folderId == f.id, onLongClick = { folderMenu = f }) { vm.showFolder(f.id); close() }
-                        DropdownMenu(expanded = folderMenu?.id == f.id, onDismissRequest = { folderMenu = null }) {
-                            DropdownMenuItem(text = { Text(s.rename) }, onClick = { folderDialog = f; folderMenu = null })
-                            DropdownMenuItem(text = { Text(s.delete) }, onClick = { vm.deleteFolder(f.id); folderMenu = null })
-                        }
-                    }
-                }
-                if (tags.isNotEmpty()) {
-                    item { Text(s.tags, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 4.dp)) }
-                    items(tags, key = { it.id }) { t ->
-                        DrawerItem(Icons.AutoMirrored.Rounded.Label, t.name, filter.tagId == t.id) { vm.showTag(t.id); close() }
-                    }
-                }
-                item {
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    DrawerItem(Icons.Rounded.Archive, s.archive, filter.view == HomeView.ARCHIVE) { vm.showView(HomeView.ARCHIVE); close() }
-                    DrawerItem(Icons.Rounded.DeleteOutline, s.trash, filter.view == HomeView.TRASH) { vm.showView(HomeView.TRASH); close() }
-                    DrawerItem(Icons.Rounded.Settings, s.settings, false) { session.navigate(Screen.Settings); close() }
-                }
-            }
-        }
-    }) {
+    // Back first clears a search, then leaves a folder/tag/archive/trash view (back to all notes).
+    androidx.activity.compose.BackHandler(enabled = filter.query.isNotEmpty() || filter.folderId != null || filter.tagId != null ||
+        filter.view !in setOf(HomeView.ALL, HomeView.FAVORITES)) {
+        if (filter.query.isNotEmpty()) vm.setFilter { it.copy(query = "") } else vm.showView(HomeView.ALL)
+    }
+
+    run {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 // Search bar
@@ -233,7 +186,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 56.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                        IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Rounded.Menu, s.menu) }
+                        Spacer(Modifier.width(12.dp))
                         Box(Modifier.weight(1f)) {
                             if (filter.query.isEmpty()) Text(s.searchHint, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                             BasicTextField(
@@ -250,7 +203,9 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     }
                 }
                 // Title row
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val filtered = filter.folderId != null || filter.tagId != null || filter.view !in setOf(HomeView.ALL, HomeView.FAVORITES)
+                Row(Modifier.fillMaxWidth().padding(start = if (filtered) 4.dp else 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (filtered) IconButton(onClick = { vm.showView(HomeView.ALL) }) { Icon(Icons.Rounded.Close, s.allNotes) }
                     Text(viewTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     if (filter.isSearching) Text(s.results(state.pinned.size + state.others.size), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -268,6 +223,11 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         Icon(if (prefs.gridView) Icons.Rounded.ViewAgenda else Icons.Rounded.GridView, if (prefs.gridView) s.listView else s.gridView)
                     }
                     if (filter.view == HomeView.TRASH && state.others.isNotEmpty()) TextButton(onClick = { confirmEmptyTrash = true }) { Text(s.emptyTrash, color = MaterialTheme.colorScheme.error) }
+                }
+                if (!filtered && !filter.isSearching) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(filter.view == HomeView.ALL, onClick = { vm.showView(HomeView.ALL) }, label = { Text(s.allNotes) })
+                    FilterChip(filter.view == HomeView.FAVORITES, onClick = { vm.showView(HomeView.FAVORITES) }, label = { Text(s.favorites) },
+                        leadingIcon = { Icon(Icons.Rounded.Star, null, Modifier.size(16.dp)) })
                 }
                 if (filter.hasRefinements) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -347,8 +307,6 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
         }
     }
     if (confirmEmptyTrash) ConfirmDialog(s.emptyTrash, s.emptyTrashConfirm, s.deleteForever, true, { vm.emptyTrash() }) { confirmEmptyTrash = false }
-    if (newFolderDialog) TextInputDialog(s.newFolder, s.folderName, "", s.save, { vm.createFolder(it) }) { newFolderDialog = false }
-    folderDialog?.let { f -> TextInputDialog(s.rename, s.folderName, f.name, s.save, { vm.renameFolder(f.id, it) }) { folderDialog = null } }
 
     if (showFilters) {
         ModalBottomSheet(onDismissRequest = { showFilters = false }, sheetState = rememberModalBottomSheetState(true)) {
@@ -442,15 +400,6 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
 @Composable
 private fun Header(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-}
-
-@Composable
-private fun DrawerItem(icon: ImageVector, label: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    NavigationDrawerItem(
-        icon = { Icon(icon, null) }, label = { Text(label, modifier = Modifier.padding(vertical = 6.dp)) }, selected = selected, onClick = onClick,
-        badge = if (onLongClick != null) { { IconButton(onClick = onLongClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.MoreVert, null, Modifier.size(18.dp)) } } } else null,
-        modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 56.dp)
-    )
 }
 
 @Composable

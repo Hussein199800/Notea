@@ -8,7 +8,8 @@ import java.util.Locale
 
 class Strings(val isArabic: Boolean) {
     private fun t(ar: String, en: String) = if (isArabic) ar else en
-    val locale: Locale = if (isArabic) Locale("ar") else Locale.ENGLISH
+    /** Arabic text with Latin digits (ar-u-nu-latn), per the owner's standard. */
+    val locale: Locale = if (isArabic) Locale.forLanguageTag("ar-u-nu-latn") else Locale.ENGLISH
 
     // App / auth
     val appName = "Notea"
@@ -155,6 +156,8 @@ class Strings(val isArabic: Boolean) {
     val ocrSetting = t("قراءة النص من الصور", "Read text from images")
     val ocrSettingDesc = t("على الجهاز بالعربي والإنجليزي، ليصبح نص الصور قابلاً للبحث", "On the device, Arabic and English, so image text becomes searchable")
     val ocrPausedDesc = t("أُوقفت تلقائياً لأن محرك القراءة توقف على هذا الهاتف. يمكنك إعادة تفعيلها.", "Paused automatically because the reading engine crashed on this phone. You can turn it back on.")
+    val explain = t("شرح", "Explain")
+    val saved = t("محفوظ ✓", "Saved ✓")
     val scanDocument = t("مسح مستند", "Scan document")
     val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
     val ocrNoClearText = t("لم يُعثر على نص واضح في الصورة. للحصول على نتيجة أفضل: صوّر الورقة مستقيمة وقريبة وبإضاءة جيدة.", "No clear text found. For better results, photograph the page straight, close and well lit.")
@@ -503,7 +506,60 @@ class Strings(val isArabic: Boolean) {
     // Widget
     val widgetName = t("ملاحظات Notea", "Notea notes")
 
-    fun num(n: Int): String = if (isArabic) java.text.NumberFormat.getInstance(locale).format(n) else n.toString()
+    /** Latin digits, bidi-isolated (U+2068…U+2069) inside Arabic text. */
+    fun num(n: Int): String = if (isArabic) "\u2068" + java.text.NumberFormat.getInstance(Locale.US).format(n) + "\u2069" else n.toString()
+
+    /** Arabic count forms: 0/1/2/3–10/11+ (e.g. ملاحظة واحدة، ملاحظتان، 3 ملاحظات، 11 ملاحظة). */
+    fun countAr(n: Int, one: String, two: String, few: String, many: String): String = when {
+        n == 0 -> "${num(0)} $many"
+        n == 1 -> one
+        n == 2 -> two
+        n % 100 in 3..10 -> "${num(n)} $few"
+        else -> "${num(n)} $many"
+    }
+    fun notesCount(n: Int) = if (isArabic) countAr(n, "ملاحظة واحدة", "ملاحظتان", "ملاحظات", "ملاحظة") else if (n == 1) "1 note" else "$n notes"
+    fun tasksCount(n: Int) = if (isArabic) countAr(n, "مهمة واحدة", "مهمتان", "مهام", "مهمة") else if (n == 1) "1 task" else "$n tasks"
+
+    val textSize = t("حجم الخط", "Text size")
+    val textSizeDesc = t("يطبَّق فوراً على كل الشاشات. الافتراضي: عادي", "Applies to every screen right away. Default: normal")
+    val textSmall = t("صغير", "Small")
+    val textDefault = t("عادي", "Normal")
+    val textLarge = t("كبير", "Large")
+    val textHuge = t("كبير جداً", "Extra large")
+    val restoreDefaults = t("استعادة الافتراضي", "Restore defaults")
+
+    // Main tabs
+    val tabNotes = t("الملاحظات", "Notes")
+    val tabTasks = t("المهام والتذكيرات", "Tasks & reminders")
+    val tabTasksShort = t("المهام", "Tasks")
+    val tabFolders = t("المجلدات والوسوم", "Folders & tags")
+    val tabFoldersShort = t("المجلدات", "Folders")
+    val tabMore = t("المزيد", "More")
+    val openTasks = t("مهام مفتوحة", "Open tasks")
+    val doneTasks = { n: Int -> t("أنجزت ${num(n)} من عناصر القوائم", "$n checklist items done") }
+    val tasksInfo = t("تُجمع هنا عناصر القوائم غير المنجزة من كل ملاحظاتك. الملاحظات المقفلة لا تظهر هنا حفاظاً على خصوصيتها. اضغط المربع لإنجاز العنصر، أو النص لفتح ملاحظته.",
+        "Unchecked checklist items from all your notes are gathered here. Locked notes are excluded to keep them private. Tap the box to complete an item, or the text to open its note.")
+    val upcomingReminders = t("التذكيرات القادمة", "Upcoming reminders")
+    val noTasksTitle = t("لا مهام مفتوحة", "No open tasks")
+    val noTasksBody = t("أضف قائمة مهام داخل أي ملاحظة لتظهر هنا.", "Add a checklist to any note and it shows up here.")
+    val noReminders = t("لا تذكيرات قادمة", "No upcoming reminders")
+    val overdue = t("فات موعده", "Overdue")
+    val countsInfo = t("الرقم بجانب كل عنصر هو عدد الملاحظات فيه (دون المحذوفات). اضغط العنصر لعرض ملاحظاته.",
+        "The number next to each item is how many notes it holds (excluding trash). Tap an item to see its notes.")
+    val noTags = t("لا وسوم بعد. اكتب #وسم داخل أي ملاحظة لإنشائه.", "No tags yet. Type #tag inside any note to create one.")
+    val noFolders = t("لا مجلدات بعد", "No folders yet")
+    val renameTag = t("إعادة تسمية الوسم", "Rename tag")
+    val tagName = t("اسم الوسم", "Tag name")
+    val deleteFolder = t("حذف المجلد", "Delete folder")
+    val deleteFolderConfirm = t("سيُحذف المجلد فقط، وتبقى ملاحظاته في «بدون مجلد».", "Only the folder is removed; its notes move to \"No folder\".")
+    val moreData = t("البيانات والنقل", "Data & transfer")
+    val moreApp = t("التطبيق", "App")
+    val backupTitle = t("النسخ الاحتياطي", "Backup")
+    val backupDesc = t("نسخة مشفّرة بصيغة notea تستعيدها متى شئت", "An encrypted notea backup you can restore anytime")
+    val transferDesc = t("انقل كل ملاحظاتك إلى هاتف جديد عبر Wi-Fi", "Move all your notes to a new phone over Wi-Fi")
+    val settingsDesc = t("المظهر، الخط، القفل، المزامنة", "Appearance, text size, lock, sync")
+    val aboutDesc = t("المطوّر، الترخيص، الإصدار", "Developer, license, version")
+    val goNotes = t("العودة إلى الملاحظات", "Back to notes")
 
     fun date(millis: Long, withTime: Boolean = true): String {
         val f = if (withTime) DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)

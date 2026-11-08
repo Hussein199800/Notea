@@ -153,6 +153,43 @@ class HomeViewModel(private val container: AppContainer, private val uid: String
 
     fun dismissMemory(id: String) { container.settings.dismissMemory(today, id); dismissTick.value++ }
 
+    /** Counts for the Folders tab (every number opens its list). */
+    data class Overview(
+        val folderCounts: Map<String, Int> = emptyMap(), val tagCounts: Map<String, Int> = emptyMap(),
+        val archived: Int = 0, val trashed: Int = 0, val favorites: Int = 0, val total: Int = 0, val noFolder: Int = 0
+    )
+
+    val overview: StateFlow<Overview> = repo.observeNotes(uid).map { notes ->
+        val live = notes.filter { it.note.trashedAt == null }
+        Overview(
+            folderCounts = live.filter { !it.note.isArchived }.groupingBy { it.note.folderId.orEmpty() }.eachCount(),
+            tagCounts = live.flatMap { d -> d.tags.map { it.id } }.groupingBy { it }.eachCount(),
+            archived = live.count { it.note.isArchived }, trashed = notes.size - live.size,
+            favorites = live.count { it.note.isFavorite && !it.note.isArchived },
+            total = live.count { !it.note.isArchived }, noFolder = live.count { !it.note.isArchived && it.note.folderId == null }
+        )
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Overview())
+
+    /** Tasks tab: open checklist items (unlocked notes) and upcoming reminders. */
+    data class TaskRow(val noteId: String, val noteTitle: String, val itemId: String, val text: String, val colorIndex: Int)
+    data class TasksState(val open: List<TaskRow> = emptyList(), val doneCount: Int = 0,
+                          val reminders: List<Pair<NoteCardModel, Long>> = emptyList())
+
+    val tasks: StateFlow<TasksState> = repo.observeNotes(uid).map { notes ->
+        val live = notes.filter { it.note.trashedAt == null && !it.note.isLocked }
+        TasksState(
+            open = live.flatMap { d -> d.sortedChecklist.filter { !it.checked }.map { TaskRow(d.note.id, d.note.title, it.id, it.text, d.note.colorIndex) } },
+            doneCount = live.sumOf { d -> d.checklist.count { it.checked } },
+            reminders = notes.filter { it.note.trashedAt == null }.mapNotNull { d -> d.activeReminder?.let { toCard(d) to it.triggerAt } }.sortedBy { it.second }
+        )
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TasksState())
+
+    fun completeTask(noteId: String, itemId: String) = io {
+        val d = repo.getNote(noteId) ?: return@io
+        val draft = repo.toDraft(uid, d) ?: return@io
+        repo.save(uid, draft.copy(checklist = draft.checklist.map { if (it.id == itemId) it.copy(checked = !it.checked) else it }, updatedAt = null))
+    }
+
     fun setFilter(change: (HomeFilter) -> HomeFilter) { _filter.value = change(_filter.value) }
     fun showView(v: HomeView) { _filter.value = HomeFilter(view = v) }
     fun showFolder(id: String?) { _filter.value = HomeFilter(folderId = id) }

@@ -91,6 +91,7 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
     val user by (auth?.authStateFlow() ?: flowOf(null)).collectAsStateWithLifecycle(initialValue = auth?.currentUser)
 
     NoteaTheme(dark) {
+      com.example.ui.theme.ScaledLayout(prefs.textScale) {
         CompositionLocalProvider(LocalStrings provides strings, LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 CrashReportDialog()
@@ -111,6 +112,7 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
                 }
             }
         }
+      }
     }
 }
 
@@ -177,6 +179,8 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
+        // Rail when the screen is wider than tall (phone landscape) or a tablet; bottom bar otherwise.
+        val railNav = maxWidth >= 600.dp || maxWidth > maxHeight
         val listWidth = maxWidth * 0.42f
         val editorTop = top as? Screen.Editor
         val openNote: (String, Boolean) -> Unit = { id, isNew ->
@@ -185,7 +189,9 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
         if (wide && (top is Screen.Home || editorTop != null)) {
             // Tablet / foldable: list + editor side by side.
             Row(Modifier.fillMaxSize()) {
-                Box(Modifier.width(listWidth).fillMaxHeight()) { HomeScreen(session, home, editorTop?.noteId, openNote) }
+              com.example.ui.screens.TabsChrome(session, home, rail = true) {
+                Row(Modifier.fillMaxSize()) {
+                Box(Modifier.width(listWidth).fillMaxHeight()) { com.example.ui.screens.TabContent(session, home, editorTop?.noteId, openNote) }
                 VerticalDivider()
                 Box(Modifier.fillMaxSize()) {
                     if (editorTop != null) EditorHost(container, session, uid, editorTop, folders)
@@ -193,13 +199,15 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                         com.example.ui.screens.NoteaMark(Modifier.width(120.dp).fillMaxHeight(0.2f))
                     }
                 }
+                }
+              }
             }
         } else {
             AnimatedContent(top, transitionSpec = {
                 (fadeIn() + slideInHorizontally { it / 12 }) togetherWith fadeOut()
             }, contentKey = { it::class to ((it as? Screen.Editor)?.noteId ?: "") }, label = "nav") { screen ->
                 when (screen) {
-                    Screen.Home -> HomeScreen(session, home, null, openNote)
+                    Screen.Home -> com.example.ui.screens.TabsChrome(session, home, rail = railNav) { com.example.ui.screens.TabContent(session, home, null, openNote) }
                     is Screen.Editor -> EditorHost(container, session, uid, screen, folders)
                     Screen.Settings -> SettingsScreen(session, email, onSignOut = {
                         session.signOut { com.example.auth.signOut(context, CredentialManager.create(context), {}, scope) }
@@ -214,7 +222,8 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                 }
             }
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+            .padding(bottom = if (top is Screen.Home && !railNav && !wide) 80.dp else 0.dp))
     }
 }
 

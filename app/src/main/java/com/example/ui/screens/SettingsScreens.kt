@@ -59,6 +59,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.rounded.FormatSize
+import com.example.ui.components.SavedTick
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -147,12 +149,22 @@ fun SettingsScreen(session: SessionViewModel, email: String?, onSignOut: () -> U
                         FilterChip(prefs.theme == m, onClick = { session.updatePrefs { it.copy(theme = m) } }, label = { Text(l) })
                     }
                 }
+                PreferenceRow(Icons.Rounded.FormatSize, s.textSize, s.textSizeDesc) { SavedTick(prefs.textScale) }
+                FlowRow(Modifier.padding(start = 72.dp, end = 16.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0.9f to s.textSmall, 1f to s.textDefault, 1.15f to s.textLarge, 1.3f to s.textHuge).forEach { (v, l) ->
+                        FilterChip(prefs.textScale == v, onClick = { session.updatePrefs { it.copy(textScale = v) } }, label = { Text(l) })
+                    }
+                }
                 PreferenceRow(Icons.Rounded.Language, s.language, null) {}
                 FlowRow(Modifier.padding(start = 72.dp, end = 16.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(LanguagePreference.ARABIC to s.langArabic, LanguagePreference.ENGLISH to s.langEnglish, LanguagePreference.SYSTEM to s.langSystem).forEach { (m, l) ->
                         FilterChip(prefs.language == m, onClick = { session.updatePrefs { it.copy(language = m) } }, label = { Text(l) })
                     }
                 }
+                val defaults = com.example.core.prefs.AppPrefs()
+                if (prefs.theme != defaults.theme || prefs.textScale != defaults.textScale || prefs.gridView != defaults.gridView || prefs.sort != defaults.sort)
+                    TextButton(onClick = { session.updatePrefs { it.copy(theme = defaults.theme, textScale = defaults.textScale, gridView = defaults.gridView, sort = defaults.sort) } },
+                        modifier = Modifier.padding(start = 60.dp, bottom = 8.dp)) { Text(s.restoreDefaults) }
             }
         }
         item {

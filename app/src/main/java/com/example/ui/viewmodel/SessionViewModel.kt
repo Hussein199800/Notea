@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+enum class MainTab { NOTES, TASKS, FOLDERS, MORE }
+
 sealed interface Screen {
     data object Home : Screen
     data class Editor(val noteId: String, val isNew: Boolean = false, val startScan: Boolean = false) : Screen
@@ -51,6 +53,11 @@ class SessionViewModel(val container: AppContainer, val uid: String) : ViewModel
 
     private val _stack = MutableStateFlow<List<Screen>>(listOf(Screen.Home))
     val stack: StateFlow<List<Screen>> = _stack.asStateFlow()
+
+    /** Selected bottom tab (kept here so it survives opening a note and coming back). */
+    private val _tab = MutableStateFlow(MainTab.NOTES)
+    val tab: StateFlow<MainTab> = _tab.asStateFlow()
+    fun selectTab(t: MainTab) { _tab.value = t }
 
     private val _unlocked = MutableStateFlow(!settings.appLockEnabled(uid))
     val unlocked: StateFlow<Boolean> = _unlocked.asStateFlow()
