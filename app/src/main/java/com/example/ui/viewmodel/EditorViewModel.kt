@@ -180,6 +180,28 @@ class EditorViewModel(
 
     fun dismissAssistant() { _assistant.value = AssistantUi.Idle }
 
+    /** Attachments currently being read by Gemini (precise OCR). */
+    private val _preciseOcr = MutableStateFlow<Set<String>>(emptySet())
+    val preciseOcr: StateFlow<Set<String>> = _preciseOcr.asStateFlow()
+    val preciseOcrAvailable: Boolean get() = container.assistantReady() && !_state.value.isLocked && _state.value.blocked == null
+
+    /** Reads one image accurately with the user's Gemini key (after consent); replaces the on-device text. */
+    fun readImagePrecisely(attachmentId: String, rememberConsent: Boolean, failMessage: (Throwable) -> String, doneMessage: String) = viewModelScope.launch(Dispatchers.IO) {
+        if (!preciseOcrAvailable) return@launch
+        val a = _state.value.attachments.firstOrNull { it.id == attachmentId } ?: return@launch
+        if (a.encrypted || a.kind != AttachmentKind.IMAGE) return@launch
+        if (rememberConsent) container.aiKeys.rememberConsent = true
+        _preciseOcr.value = _preciseOcr.value + attachmentId
+        try {
+            val text = container.assistant.readImage(repo.attachments.file(uid, a.localPath))
+            repo.setExtractedText(a.id, text.ifBlank { com.example.ocr.OcrWorker.NO_TEXT })
+            _events.tryEmit(EditorEvent.Message(doneMessage))
+        } catch (e: Throwable) {
+            com.example.core.Diagnostics.log(container.app, "ai-ocr", "Precise reading failed", e)
+            _events.tryEmit(EditorEvent.Message(failMessage(e)))
+        } finally { _preciseOcr.value = _preciseOcr.value - attachmentId }
+    }
+
     /** Applies assistant output; the previous state is kept as a version first. */
     private fun withAssistantSnapshot(change: (EditorState) -> EditorState) = viewModelScope.launch(Dispatchers.IO) {
         saveNow(force = true)

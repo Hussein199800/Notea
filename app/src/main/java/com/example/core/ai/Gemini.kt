@@ -92,6 +92,21 @@ class GeminiClient(private val baseUrl: String = "https://generativelanguage.goo
         return text
     }
 
+    /** One request with an image (base64 inline). Plain-text answer. */
+    fun generateWithImage(key: String, model: String, system: String, prompt: String, image: ByteArray, mime: String, maxOutputTokens: Int = 4000): String {
+        val parts = JSONArray()
+            .put(JSONObject().put("inline_data", JSONObject().put("mime_type", mime).put("data", android.util.Base64.encodeToString(image, android.util.Base64.NO_WRAP))))
+            .put(JSONObject().put("text", prompt))
+        val body = JSONObject()
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+            .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", parts)))
+            .put("generationConfig", JSONObject().put("maxOutputTokens", maxOutputTokens).put("temperature", 0.0))
+        val res = request("POST", "$baseUrl/$model:generateContent", key, body.toString())
+        val cand = res.optJSONArray("candidates")?.optJSONObject(0) ?: throw AiError.Blocked()
+        val out = cand.optJSONObject("content")?.optJSONArray("parts") ?: return ""
+        return (0 until out.length()).joinToString("") { out.getJSONObject(it).optString("text") }
+    }
+
     private fun request(method: String, url: String, key: String, body: String?): JSONObject {
         val conn = try {
             (URL(url).openConnection() as HttpURLConnection).apply {

@@ -599,6 +599,27 @@ class Strings(val isArabic: Boolean) {
         com.example.core.update.Updater.Reason.DEBUG_BUILD -> t("هذه نسخة تجريبية", "This is a test build") to t("التحديث التلقائي متاح في النسخة الرسمية فقط، وليس في النسخ التجريبية.", "Automatic updates are only available in the official build, not in test builds.")
     }
 
+    // Precise OCR (Gemini)
+    val preciseRead = t("قراءة دقيقة", "Precise reading")
+    val preciseReading = t("جارٍ القراءة الدقيقة…", "Reading precisely…")
+    val preciseDone = t("قُرئ النص بدقة", "Text read precisely")
+    val preciseHint = t("للمستندات الرسمية والجداول: فعّل «المساعد الذكي» من «المزيد» ليظهر زر «قراءة دقيقة».", "For official documents and tables: turn on the AI assistant in More to get «Precise reading».")
+    val consentImageBody = t("ستُرسل هذه الصورة فقط إلى Google Gemini بمفتاحك لقراءة نصها بدقة، ثم يُحفظ النص في ملاحظتك. لا يُرسل أي شيء آخر.", "Only this image is sent to Google Gemini with your key to read its text accurately; the text is then saved in your note. Nothing else is sent.")
+
+    // Scan chooser
+    val scanChooseTitle = t("كيف تريد مسح المستند؟", "How do you want to scan?")
+    val scanChooseBody = t("ماسح Google غير جاهز على هذا الهاتف. اختر طريقة، وسيقرأ Notea النص من الصورة تلقائياً.", "Google's scanner isn't ready on this phone. Pick a way; Notea reads the text from the photo automatically.")
+    val scanOptGoogle = t("تثبيت ماسح Google", "Install Google's scanner")
+    val scanOptGoogleDesc = t("تنزيل لمرة واحدة من خدمات Google، يقصّ الورقة ويعدّل ميلانها تلقائياً", "One-time download from Google services; crops and straightens pages automatically")
+    val scanOptPhoneCamera = t("كاميرا الهاتف (وضع المستندات)", "Phone camera (document mode)")
+    val scanOptPhoneCameraDesc = t("في سامسونج وشاومي وهواوي: اختر وضع «مستند» وصوّر، ثم ارجع وستظهر الصورة لتختارها", "On Samsung, Xiaomi and Huawei: choose «Document» mode and shoot, then come back and pick the photo")
+    val scanOptQuick = t("التقاط سريع", "Quick photo")
+    val scanOptQuickDesc = t("صورة مباشرة بالكاميرا تُضاف إلى الملاحظة", "Take a photo that goes straight into the note")
+    val scanOptGallery = t("صورة من المعرض", "From the gallery")
+    val scanOptGalleryDesc = t("صورة ممسوحة مسبقاً أو لقطة شاشة", "An already scanned image or a screenshot")
+    val installingScanner = { p: Int -> t("جارٍ تثبيت ماسح Google… ${num(p)}٪", "Installing Google's scanner… $p%") }
+    val googleScannerUnavailable = t("تعذّر تثبيت ماسح Google على هذا الهاتف (لا توجد خدمات Google أو لا اتصال). استخدم كاميرا الهاتف بوضع المستندات.", "Couldn't install Google's scanner on this phone (no Google services or no connection). Use the phone camera's document mode.")
+
     // Main tabs
     val tabNotes = t("الملاحظات", "Notes")
     val tabTasks = t("المهام والتذكيرات", "Tasks & reminders")

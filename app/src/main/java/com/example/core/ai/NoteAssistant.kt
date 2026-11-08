@@ -60,6 +60,24 @@ class NoteAssistant(private val client: GeminiClient, private val keys: AiKeySto
         return Plan(o.optString("goal"), o.optJSONArray("steps").strings())
     }
 
+    /**
+     * Accurate reading of ONE image (user-initiated, after consent). The image is downscaled to
+     * at most [IMAGE_MAX_SIDE] px JPEG first to keep the cost low. Returns plain text ("" if none).
+     */
+    fun readImage(file: java.io.File): String {
+        val key = keys.key() ?: throw AiError.InvalidKey()
+        val jpeg = ImageForAi.prepare(file) ?: throw AiError.Other("unreadable image")
+        val text = client.generateWithImage(
+            key, model(key),
+            "You are an exact OCR engine. Transcribe ALL text in the image exactly as written, in its original language " +
+                "(Arabic stays Arabic, digits as printed). Keep the reading order of the page (right-to-left for Arabic). " +
+                "Tables: one row per line, cells separated by \" | \", keeping the printed order of the columns. " +
+                "Do not translate, summarize, explain or add anything. If there is no readable text, reply with nothing.",
+            "Transcribe this image.", jpeg, "image/jpeg", 4000
+        )
+        return text.trim().removePrefix("```").removeSuffix("```").trim()
+    }
+
     fun compare(a: String, b: String): Comparison {
         val o = call(
             "Compare two personal notes. Reply ONLY with JSON {\"contradictions\": [string], \"outdated\": [string], \"note\": string}. " +
@@ -75,7 +93,24 @@ class NoteAssistant(private val client: GeminiClient, private val keys: AiKeySto
     companion object {
         /** ≈ 3-4k tokens of Arabic text: one note costs a fraction of a cent on paid plans. */
         const val MAX_INPUT_CHARS = 12_000
+        const val IMAGE_MAX_SIDE = 2000
         /** Shorter notes don't benefit from the assistant, so it isn't offered. */
         const val MIN_NOTE_CHARS = 280
+    }
+}
+
+/** Downscales an image to a JPEG small enough for one AI request. */
+object ImageForAi {
+    fun prepare(file: java.io.File, maxSide: Int = NoteAssistant.IMAGE_MAX_SIDE): ByteArray? {
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(file.path, o)
+        if (o.outWidth <= 0 || o.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(o.outWidth, o.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val bmp = android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val scale = maxSide.toFloat() / maxOf(bmp.width, bmp.height)
+        val out = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+        return java.io.ByteArrayOutputStream().use { s -> out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, s); s.toByteArray() }
+            .also { if (out !== bmp) out.recycle(); bmp.recycle() }
     }
 }

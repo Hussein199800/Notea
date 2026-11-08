@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -256,11 +258,36 @@ private fun OcrPanel(vm: EditorViewModel, a: AttachmentEntity, blockId: String, 
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val text = a.extractedText
+    val reading by vm.preciseOcr.collectAsState()
+    var consent by remember { mutableStateOf(false) }
+    val precise: () -> Unit = { if (vm.needsConsent()) consent = true else vm.readImagePrecisely(a.id, false, { s.aiError(it) }, s.preciseDone) }
+    if (consent) ConsentDialog(s.consentImageBody, onSend = { r -> vm.readImagePrecisely(a.id, r, { s.aiError(it) }, s.preciseDone) }) { consent = false }
+    val canPrecise = !readOnly && a.kind == AttachmentKind.IMAGE && !a.encrypted && vm.preciseOcrAvailable
+    if (a.id in reading) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp)); Text(s.preciseReading, style = MaterialTheme.typography.labelMedium)
+        }
+        return
+    }
+    @Composable fun PreciseButton() {
+        if (canPrecise) TextButton(onClick = precise, modifier = Modifier.heightIn(min = 44.dp)) {
+            Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(s.preciseRead)
+        }
+    }
     when {
-        text.isBlank() -> Text(s.ocrPending, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text.isBlank() -> Column {
+            Text(s.ocrPending, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp))
-        text == OcrWorker.NO_TEXT -> Text(s.ocrNoClearText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp))
+            PreciseButton()
+        }
+        text == OcrWorker.NO_TEXT -> Column {
+            Text(s.ocrNoClearText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp))
+            if (canPrecise) PreciseButton()
+            else if (a.kind == AttachmentKind.IMAGE && !a.encrypted && !readOnly) Text(s.preciseHint, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
+        }
         else -> Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -275,6 +302,7 @@ private fun OcrPanel(vm: EditorViewModel, a: AttachmentEntity, blockId: String, 
                         android.widget.Toast.makeText(context, s.copied, android.widget.Toast.LENGTH_SHORT).show()
                     }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(s.copy) }
                     if (!readOnly) TextButton(onClick = { vm.insertTextAfter(blockId, text) }) { Text(s.insertIntoNote) }
+                    PreciseButton()
                 }
             }
         }

@@ -12,6 +12,7 @@ object OcrFilter {
     const val MIN_WORD_CONF = 60f
     const val MIN_MEAN_CONF = 62f
     const val MIN_WORDS = 3
+    const val CLEAR_CONF = 80f
 
     private val arabic = Regex("[\\u0600-\\u06FF]")
     private val latin = Regex("[A-Za-z]")
@@ -38,7 +39,8 @@ object OcrFilter {
             kept += good.size; confSum += good.sumOf { it.confidence.toDouble() }.toFloat()
         }
         val mean = if (kept == 0) 0f else confSum / kept
-        val accepted = kept >= MIN_WORDS && mean >= MIN_MEAN_CONF
+        // Short but very clear text (e.g. a password or a label) is accepted too.
+        val accepted = (kept >= MIN_WORDS && mean >= MIN_MEAN_CONF) || (kept >= 1 && mean >= CLEAR_CONF)
         return Result(if (accepted) out.toString().trim() else "", kept, mean, accepted)
     }
 }
