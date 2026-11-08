@@ -94,7 +94,7 @@ class Strings(val isArabic: Boolean) {
     val results = { n: Int -> t("${num(n)} نتيجة", "$n results") }
     val lockedPreview = t("ملاحظة مقفلة", "Locked note")
     val untitled = t("بلا عنوان", "Untitled")
-    val selectedCount = { n: Int -> t("${num(n)} محددة", "$n selected") }
+    val selectedCount = { n: Int -> t("المحدد: ${notesCount(n)}", "$n selected") }
 
     // Note actions
     val pin = t("تثبيت", "Pin")

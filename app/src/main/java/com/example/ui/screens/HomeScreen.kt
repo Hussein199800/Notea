@@ -253,7 +253,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     }
                     if (filter.view == HomeView.TRASH && state.others.isNotEmpty()) TextButton(onClick = { confirmEmptyTrash = true }) { Text(s.emptyTrash, color = MaterialTheme.colorScheme.error) }
                 }
-                if (!filtered && !filter.isSearching) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!filtered && !filter.isSearching && selection.isEmpty()) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(filter.view == HomeView.ALL, onClick = { vm.showView(HomeView.ALL) }, label = { Text(s.allNotes) })
                     FilterChip(filter.view == HomeView.FAVORITES, onClick = { vm.showView(HomeView.FAVORITES) }, label = { Text(s.favorites) },
                         leadingIcon = { Icon(Icons.Rounded.Star, null, Modifier.size(16.dp)) })
@@ -306,7 +306,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     }
                 }
             }
-            if (filter.view != HomeView.TRASH && filter.view != HomeView.ARCHIVE) {
+            if (filter.view != HomeView.TRASH && filter.view != HomeView.ARCHIVE && selection.isEmpty()) {
                 Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SmallFloatingActionButton(onClick = { vm.createNote({ NoteDraft(id = it) }) { id -> session.navigate(Screen.Editor(id, isNew = true, startScan = true)) } },

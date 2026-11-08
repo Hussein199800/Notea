@@ -11,6 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -119,4 +124,29 @@ class TabsShotTest {
         // Done items are not listed as open.
         assertTrue(rule.onAllNodesWithText("طباعة المذكرة").fetchSemanticsNodes().isEmpty())
     }
+
+    @Config(qualifiers = "w320dp-h640dp-xhdpi")
+    @Test fun longPress_selectsNotes_andTrashOffersUndo() {
+        val session = SessionViewModel(container, LOCAL_UID)
+        val home = HomeViewModel(container, LOCAL_UID)
+        val messages = mutableListOf<com.example.ui.viewmodel.UiMessage>()
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launchCollect(session, messages)
+        rule.setContent { Frame(true, false) { TabsChrome(session, home, false) { TabContent(session, home, null) { _, _ -> } } } }
+        repeat(6) { rule.mainClock.advanceTimeBy(200); Thread.sleep(150) }
+        rule.onAllNodesWithText("تسوق")[0].performTouchInput { longClick() }
+        rule.waitForIdle()
+        assertTrue(rule.onAllNodesWithText("المحدد", substring = true).fetchSemanticsNodes().isNotEmpty())
+        save("w320_ar_selection")
+        rule.onNodeWithContentDescription("نقل إلى المحذوفات").performClick()
+        repeat(4) { rule.mainClock.advanceTimeBy(200); Thread.sleep(150) }
+        assertTrue(messages.any { it.undo != null })
+        // Undo restores the note.
+        messages.first { it.undo != null }.undo!!.invoke()
+        Thread.sleep(500)
+        assertTrue(runBlocking { container.repository.getNote("n2")!!.note.trashedAt == null })
+        job.cancel()
+    }
+
+    private fun kotlinx.coroutines.CoroutineScope.launchCollect(session: SessionViewModel, into: MutableList<com.example.ui.viewmodel.UiMessage>) =
+        launch { session.messages.collect { into += it } }
 }
