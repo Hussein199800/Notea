@@ -156,6 +156,7 @@ class BackupManager(
                 put("isArchived", n.isArchived); put("trashedAt", n.trashedAt ?: JSONObject.NULL); put("isLocked", n.isLocked)
                 put("lockPinHash", n.lockPinHash); put("lockHint", n.lockHint); put("createdAt", n.createdAt); put("updatedAt", n.updatedAt)
                 put("importSource", n.importSource)
+                put("parentId", n.parentId ?: JSONObject.NULL); put("icon", n.icon)
                 put("tags", JSONArray(d.tags.map { it.name }))
                 put("checklist", JSONArray(d.checklist.toDrafts().toJson()))
                 if (d.blocks.isNotEmpty()) put("blocks", JSONArray(d.blocks.sortedBy { it.position }
@@ -399,7 +400,9 @@ class BackupManager(
             trashedAt = if (o.isNull("trashedAt")) null else o.optLong("trashedAt"), colorIndex = o.optInt("colorIndex"),
             attachments = atts, warnings = warnings, storedLocked = storedLocked, reminderAt = reminderAt,
             blocks = if (storedLocked != null) null else (o.optJSONArray("blocks")?.let { com.example.data.repository.blocksFromJson(it.toString()) }
-                ?: lockedPlainBlocks)
+                ?: lockedPlainBlocks),
+            parentKey = o.optString("parentId").takeIf { !o.isNull("parentId") && it.isNotBlank() },
+            icon = o.optString("icon")
         ).also {
             if (lockedPlainAvailable) lockedPlainIds += id
         }

@@ -33,7 +33,7 @@ service cloud.firestore {
       return ['userId', 'title', 'content', 'category', 'colorIndex', 'isPinned', 'isLocked', 'notePinHash',
               'lockHint', 'isArchived', 'createdAt', 'updatedAt',
               'schemaVersion', 'isFavorite', 'trashedAt', 'folderId', 'tags', 'checklist', 'reminderAt',
-              'clientUpdatedAt', 'deviceId', 'blocks'];
+              'clientUpdatedAt', 'deviceId', 'blocks', 'parentId', 'icon'];
     }
     function requiredNoteKeys() {
       return ['userId', 'title', 'content', 'category', 'colorIndex', 'isPinned', 'isLocked', 'notePinHash',
@@ -58,6 +58,8 @@ service cloud.firestore {
              optString(data, 'folderId', 128) && optList(data, 'tags', 50) && optList(data, 'checklist', 500) &&
              optInt(data, 'reminderAt') && optInt(data, 'clientUpdatedAt') && optString(data, 'deviceId', 64) &&
              optList(data, 'blocks', 500) &&
+             // v1.3: sub-notes and per-note emoji icon.
+             optString(data, 'parentId', 128) && optString(data, 'icon', 64) &&
              // Locked notes keep their layout inside the encrypted payload.
              (!data.isLocked || !('blocks' in data) || data.blocks.size() == 0) &&
              // Locked notes must never carry plaintext checklist items.

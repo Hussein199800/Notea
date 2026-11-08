@@ -39,7 +39,7 @@ abstract class NoteaDatabase : RoomDatabase() {
     abstract fun blockDao(): BlockDao
 
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
         /** Same file name as v1 so existing installs are migrated in place. */
         const val FILE_NAME = "arabic_notes_offline.db"
 
@@ -58,7 +58,7 @@ abstract class NoteaDatabase : RoomDatabase() {
                 // in development rather than silently wipe user data in production.
                 .build()
 
-        val ALL_MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        val ALL_MIGRATIONS: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }
 
@@ -93,5 +93,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         V3Schema.STATEMENTS.forEach { db.execSQL(it) }
+    }
+}
+
+/** v3 -> v4 (additive only): sub-notes (parentId) and a per-note emoji icon. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `notes` ADD COLUMN `parentId` TEXT DEFAULT NULL")
+        db.execSQL("ALTER TABLE `notes` ADD COLUMN `icon` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_notes_parentId` ON `notes` (`parentId`)")
     }
 }

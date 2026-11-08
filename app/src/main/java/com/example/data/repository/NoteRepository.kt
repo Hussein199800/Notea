@@ -104,7 +104,7 @@ class NoteRepository(
             isPinned = n.isPinned, isFavorite = n.isFavorite, isArchived = n.isArchived, trashedAt = n.trashedAt,
             isLocked = n.isLocked, lockPinHash = n.lockPinHash, lockHint = n.lockHint,
             tags = d.tags.map { it.name }, checklist = dec.checklist, createdAt = n.createdAt, updatedAt = n.updatedAt,
-            importSource = n.importSource, blocks = dec.blocks
+            importSource = n.importSource, blocks = dec.blocks, parentId = n.parentId, icon = n.icon
         )
     }
 
@@ -151,7 +151,9 @@ class NoteRepository(
             legacyCategory = existing?.legacyCategory ?: "",
             legacyPending = 0,
             importSource = draft.importSource.ifBlank { existing?.importSource ?: "" },
-            contentHash = if (draft.isLocked) "" else contentHash(draft.title, draft.body, draft.checklist)
+            contentHash = if (draft.isLocked) "" else contentHash(draft.title, draft.body, draft.checklist),
+            parentId = (draft.parentId ?: existing?.parentId)?.takeIf { it != draft.id },
+            icon = (draft.icon ?: existing?.icon ?: "").take(16)
         )
         val wasLocked = existing?.isLocked == true
         db.withTransaction {
@@ -229,6 +231,28 @@ class NoteRepository(
     suspend fun moveToFolder(uid: String, id: String, folderId: String?) = update(uid, id) { it.copy(folderId = folderId) }
     suspend fun moveToTrash(uid: String, id: String) = update(uid, id) { it.copy(trashedAt = now(), isPinned = false) }
     suspend fun restoreFromTrash(uid: String, id: String) = update(uid, id) { it.copy(trashedAt = null) }
+    /** Restores sub-note/icon metadata from a backup without touching the note's dates. */
+    suspend fun restoreMeta(uid: String, id: String, parentId: String?, icon: String) {
+        val n = notes.getNote(id) ?: return
+        if (parentId == id) return
+        notes.upsert(n.copy(parentId = parentId ?: n.parentId, icon = icon.ifBlank { n.icon }.take(16), syncState = SyncState.DIRTY))
+        listener.onNotesChanged(uid)
+    }
+    suspend fun setIcon(uid: String, id: String, icon: String) = update(uid, id) { it.copy(icon = icon.take(16)) }
+
+    /** Moves [id] under [parentId] (null = top level). Refuses cycles (a note can't go under its own descendant). */
+    suspend fun setParent(uid: String, id: String, parentId: String?): Boolean {
+        if (parentId != null) {
+            var cur: String? = parentId
+            var guard = 0
+            while (cur != null && guard++ < 64) {
+                if (cur == id) return false
+                cur = notes.getNote(cur)?.parentId
+            }
+        }
+        update(uid, id) { it.copy(parentId = parentId) }
+        return true
+    }
 
     /** Permanent delete. Synced notes become tombstones until the remote delete is confirmed. */
     suspend fun deletePermanently(uid: String, id: String) {

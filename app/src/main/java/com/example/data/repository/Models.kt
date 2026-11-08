@@ -35,7 +35,11 @@ data class NoteDraft(
     val updatedAt: Long? = null,
     val importSource: String = "",
     /** Ordered layout (v3). Null = classic layout (text, checklist, attachments). */
-    val blocks: List<BlockDraft>? = null
+    val blocks: List<BlockDraft>? = null,
+    /** v4. Null = keep the stored parent (change it with NoteRepository.setParent). */
+    val parentId: String? = null,
+    /** v4. Null = keep the stored icon. */
+    val icon: String? = null
 ) {
     val isBlank: Boolean get() = title.isBlank() && body.isBlank() && checklist.all { it.text.isBlank() }
 }
@@ -48,7 +52,7 @@ object Blocks {
 
     /** Canonical note body = text blocks joined by a blank line (used for search, previews, sync). */
     fun joinText(blocks: List<BlockDraft>): String =
-        blocks.filter { it.type == com.example.data.local.BlockType.TEXT }.joinToString(SEPARATOR) { it.text }
+        blocks.filter { it.type in com.example.data.local.BlockType.TEXTUAL }.joinToString(SEPARATOR) { it.text }
 
     fun defaultLayout(body: String, checklist: List<ChecklistDraft>, attachmentIds: List<String>): List<BlockDraft> = buildList {
         add(BlockDraft(type = com.example.data.local.BlockType.TEXT, text = body))
@@ -95,7 +99,7 @@ object Blocks {
         var firstText = true
         for ((id, type, extra) in layout) {
             when (type) {
-                com.example.data.local.BlockType.TEXT -> {
+                com.example.data.local.BlockType.TEXT, com.example.data.local.BlockType.TOGGLE, com.example.data.local.BlockType.CALLOUT -> {
                     if (!firstText) { if (!body.startsWith(SEPARATOR, pos)) return null; pos += SEPARATOR.length }
                     val len = (extra as? Number)?.toInt() ?: return null
                     if (pos + len > body.length) return null

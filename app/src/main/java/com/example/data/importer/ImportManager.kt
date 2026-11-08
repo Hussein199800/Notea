@@ -193,6 +193,12 @@ class ImportManager(private val context: Context, private val repository: NoteRe
                 failed += ImportIssue(c.sourceName, ImportWarning.UNREADABLE, e.message.orEmpty())
             }
         }
+        // Sub-notes: link each restored note to its restored parent (or an existing note with that id).
+        for (c in candidates) {
+            val child = ids[c.key] ?: continue
+            val parent = c.parentKey?.let { ids[it] ?: it.takeIf { id -> repository.getNote(id) != null } }
+            if (parent != null || c.icon.isNotBlank()) runCatching { repository.restoreMeta(uid, child, parent, c.icon) }
+        }
         return ImportResult(created, merged, skipped, attachments, failed, ids)
     }
 

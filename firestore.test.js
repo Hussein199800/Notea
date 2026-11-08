@@ -205,6 +205,8 @@ function v2NotePayload(userId, now = new Date(Date.now() - 1000)) {
     clientUpdatedAt: now.getTime(),
     deviceId: "device-1",
     blocks: [{ id: "b1", type: "text", len: 5 }, { id: "b2", type: "attachment", attachmentId: "a1" }],
+    parentId: "",
+    icon: "📒",
   };
 }
 
@@ -266,4 +268,14 @@ test("10. Owner may probe a not-yet-existing note (pre-write conflict check); ot
   await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("notes").doc("not_yet").get());
   await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("notes").doc("not_yet").get());
   await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("folders").doc("nf").get());
+});
+
+test("11. sub-notes and icon: valid parentId/icon accepted, wrong types and oversize rejected", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const notes = aliceDb.collection("users").doc(ALICE_UID).collection("notes");
+  await assertSucceeds(notes.doc("child1").set({ ...v2NotePayload(ALICE_UID), parentId: "v2note", icon: "📚" }));
+  await assertFails(notes.doc("child2").set({ ...v2NotePayload(ALICE_UID), parentId: 42 }));
+  await assertFails(notes.doc("child3").set({ ...v2NotePayload(ALICE_UID), parentId: "x".repeat(129) }));
+  await assertFails(notes.doc("child4").set({ ...v2NotePayload(ALICE_UID), icon: "x".repeat(65) }));
+  await assertFails(notes.doc("child5").set({ ...v2NotePayload(ALICE_UID), icon: true }));
 });

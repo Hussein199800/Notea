@@ -71,6 +71,9 @@ data class ImportCandidate(
     val reminderAt: Long? = null,
     /** Ordered layout from a .notea backup (attachment ids refer to [ImportedAttachment.originalId]). */
     val blocks: List<com.example.data.repository.BlockDraft>? = null,
+    /** Backup id of the parent note (sub-notes); remapped to the restored id after commit. */
+    val parentKey: String? = null,
+    val icon: String = "",
     val duplicate: DuplicateKind = DuplicateKind.NONE,
     val duplicateOfId: String? = null,
     val action: ImportAction = ImportAction.IMPORT
