@@ -9,6 +9,19 @@ object Changelog {
 
     val releases = listOf(
         Release(
+            "1.4.1", "2026-11-09",
+            ar = listOf(
+                "تسجيل الدخول بحساب Google ومزامنة ملاحظاتك تلقائياً بين أجهزتك",
+                "ملاحظاتك الحالية على الهاتف تنتقل إلى حسابك عند أول تسجيل دخول دون فقد شيء",
+                "الملاحظات المقفلة تُرفع مشفّرة فقط، ويبقى الاستخدام بدون حساب متاحاً كما هو"
+            ),
+            en = listOf(
+                "Sign in with Google and sync your notes automatically across devices",
+                "Notes already on this phone move into your account on first sign-in, nothing is lost",
+                "Locked notes are uploaded encrypted only; using the app without an account stays available"
+            )
+        ),
+        Release(
             "1.4.0", "2026-11-09",
             ar = listOf(
                 "«اسأل عن هذه الملاحظة»: محادثة حرة والجواب من الملاحظة فقط",

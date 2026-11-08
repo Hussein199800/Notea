@@ -31,6 +31,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Firebase config (optional secret; without it the app builds in on-device mode)
+        env:
+          GS_B64: ${{ secrets.NOTEA_GOOGLE_SERVICES_BASE64 }}
+        run: |
+          if [ -n "$GS_B64" ]; then echo "$GS_B64" | base64 -d > app/google-services.json; echo "Firebase enabled"; else echo "::notice::No NOTEA_GOOGLE_SERVICES_BASE64: on-device mode"; fi
+
       - name: Unit tests (incl. version match, update rules, screenshots smoke)
         run: ./gradlew :app:testDebugUnitTest --no-daemon
 
