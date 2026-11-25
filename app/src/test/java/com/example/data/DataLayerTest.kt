@@ -9,9 +9,12 @@ import com.example.core.testVault
 import com.example.core.security.NoteCipher
 import com.example.data.legacy.LegacyUpgrader
 import com.example.data.local.MIGRATION_1_2
+import com.example.data.local.AttachmentKind
+import com.example.data.local.BlockType
 import com.example.data.local.NoteaDatabase
 import com.example.data.local.SyncState
 import com.example.data.repository.AttachmentStore
+import com.example.data.repository.BlockDraft
 import com.example.data.repository.ChecklistDraft
 import com.example.data.repository.DecryptResult
 import com.example.data.repository.NoteDraft
@@ -169,6 +172,42 @@ class RepositoryTest {
         repo.restoreRevision("u", rev)
         assertEquals("first", db.noteDao().getNote("r")!!.body)
         assertEquals(listOf("first", "second"), db.revisionDao().forNote("r").map { it.body }.sorted())
+    }
+
+    @Test fun revisions_snapshotKeepsLayoutOnlyChanges() = runBlocking {
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", body = "نص"))
+        val attachment = repo.addAttachment("u", "r", AttachmentKind.LINK, "رابط", "", null, url = "https://example.com")
+        val text = BlockDraft("text", BlockType.TEXT, "نص")
+        val link = BlockDraft("link", BlockType.ATTACHMENT, attachmentId = attachment.id)
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", blocks = listOf(text, link)))
+        repo.snapshot("r")
+        repo.snapshot("r")
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", blocks = listOf(link, text)))
+        repo.snapshot("r")
+
+        val saved = db.revisionDao().forNote("r")
+        assertEquals(2, saved.size)
+        assertTrue(saved.all { it.body == "نص" })
+        assertEquals(2, saved.map { it.blocksJson }.distinct().size)
+    }
+
+    @Test fun extractedText_isIndexedThenClearedOnLock() = runBlocking {
+        vault.setUp("u", "passphrase1".toCharArray())
+        val draft = NoteDraft(id = "image-note", title = "صورة")
+        repo.save("u", draft)
+        val attachment = repo.addAttachment("u", draft.id, AttachmentKind.IMAGE, "image.png", "image/png", byteArrayOf(1, 2, 3).inputStream())
+        repo.setExtractedText(attachment.id, "نص مصور")
+        val query = ArabicNormalizer.toFtsQuery("مصور")!!
+        assertEquals(listOf(draft.id), db.searchDao().search("u", query))
+
+        repo.save("u", draft.copy(isLocked = true))
+        repo.setExtractedText(attachment.id, "نص مصور")
+        assertTrue(db.attachmentDao().get(attachment.id)!!.extractedText.isEmpty())
+        assertTrue(db.searchDao().search("u", query).isEmpty())
+
+        repo.removeAttachment("u", attachment.id)
+        repo.setExtractedText(attachment.id, "نص مصور")
+        assertNull(db.attachmentDao().get(attachment.id))
     }
 
     @Test fun trash_and_tombstones() = runBlocking {

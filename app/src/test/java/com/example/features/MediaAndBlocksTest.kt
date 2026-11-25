@@ -1,6 +1,7 @@
 package com.example.features
 
 import android.content.Context
+import androidx.core.content.FileProvider
 import androidx.test.core.app.ApplicationProvider
 import com.example.core.media.ImageNormalizer
 import com.example.core.media.TiffDecoder
@@ -19,11 +20,14 @@ import com.example.data.repository.ChecklistDraft
 import com.example.data.repository.DecryptResult
 import com.example.data.repository.NoteDraft
 import com.example.data.repository.NoteRepository
+import com.example.data.repository.VaultLockedException
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +35,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.io.IOException
 
 private fun res(name: String) = ImageNormalizer::class.java.classLoader!!.getResource("images/$name").readBytes()
 
@@ -39,6 +44,31 @@ private fun res(name: String) = ImageNormalizer::class.java.classLoader!!.getRes
 @Config(sdk = [35])
 class MediaTest {
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test fun encryptedAttachmentRequiresKeyAndFailedTransformPreservesOriginal() {
+        val store = AttachmentStore(ctx)
+        val key = ByteArray(32) { 1 }
+        val wrongKey = ByteArray(32) { 2 }
+        val bytes = "تقرير PDF".toByteArray()
+        val stored = store.save("user", "report", bytes.inputStream(), key)
+        assertThrows(VaultLockedException::class.java) { store.open("user", stored.relativePath, null) }
+        assertThrows(IOException::class.java) { store.transform("user", stored.relativePath, wrongKey, null) }
+        assertEquals(listOf("report"), store.userDir("user").list()?.toList())
+        assertArrayEquals(bytes, store.open("user", stored.relativePath, key).use { it.readBytes() })
+        assertArrayEquals(bytes, store.viewableFile("user", stored.relativePath, "pdf", key).readBytes())
+        store.clearDecryptedCache()
+        assertFalse(File(ctx.cacheDir, "decrypted").exists())
+        assertThrows(IllegalArgumentException::class.java) { store.save("user", "../outside", bytes.inputStream(), null) }
+    }
+
+    @Test fun attachmentResolvesGenericMimeAndCameraProviderSupportsItsCacheDirectory() {
+        assertEquals("application/pdf", AttachmentStore.mimeFor("report.PDF", "application/octet-stream"))
+        assertEquals("image/svg+xml", AttachmentStore.mimeFor("vector.svg", "*/*"))
+        assertEquals("text/plain", AttachmentStore.mimeFor("untitled", "text/plain; charset=utf-8"))
+        val cameraFile = File(ctx.cacheDir, "camera/test.jpg")
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", cameraFile)
+        assertEquals("camera", uri.pathSegments.first())
+    }
 
     private fun pixel(name: String, x: Int, y: Int): Int {
         val b = TiffDecoder.decode(res(name))

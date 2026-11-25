@@ -159,6 +159,18 @@ interface AttachmentDao {
     @Upsert
     suspend fun upsert(attachment: AttachmentEntity)
 
+    @Query("""
+        UPDATE attachments SET extractedText = :text
+        WHERE id = :id AND encrypted = 0 AND EXISTS (
+            SELECT 1 FROM notes
+            WHERE notes.id = attachments.noteId AND notes.isLocked = 0 AND notes.deleted = 0
+        )
+    """)
+    suspend fun updateExtractedText(id: String, text: String): Int
+
+    @Query("UPDATE attachments SET extractedText = '' WHERE noteId = :noteId AND extractedText != ''")
+    suspend fun clearExtractedText(noteId: String)
+
     @Query("DELETE FROM attachments WHERE id = :id")
     suspend fun delete(id: String)
 }

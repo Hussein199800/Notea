@@ -8,10 +8,13 @@ import com.example.data.backup.BackupException
 import com.example.data.importer.ImportAction
 import com.example.data.importer.ImportCandidate
 import com.example.data.importer.ImportInput
+import com.example.data.importer.ImportIssue
 import com.example.data.importer.ImportPreview
 import com.example.data.importer.ImportResult
 import com.example.data.importer.ImportSource
 import com.example.data.importer.ImportWarning
+import com.example.data.importer.toImportIssue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +28,7 @@ sealed interface DataTask {
     data class NeedsBackupPassword(val uri: Uri, val wrong: Boolean = false) : DataTask
     data class NeedsVaultPassphrase(val uri: Uri, val password: CharArray?, val wrong: Boolean = false) : DataTask
     data class Failed(val reason: String) : DataTask
+    data object ImportFailed : DataTask
     data class Done(val result: ImportResult) : DataTask
 }
 
@@ -55,22 +59,38 @@ class DataViewModel(private val container: AppContainer, private val uid: String
 
     fun previewFiles(source: ImportSource, uris: List<Uri>, label: String, onReady: () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
         _task.value = DataTask.Working(label)
-        // A single .notea file goes through the backup path.
-        val inputs = uris.map { importer.inputFromUri(it) }
-        if (inputs.size == 1 && inputs[0].extension == "notea") {
-            restorePreview(uris[0], null, null, label, onReady); return@launch
+        val issues = mutableListOf<ImportIssue>()
+        val inputs = uris.mapNotNull { uri ->
+            try {
+                importer.inputFromUri(uri)
+            } catch (e: Exception) {
+                issues += e.toImportIssue(uri.lastPathSegment?.substringAfterLast('/') ?: "?")
+                null
+            }
         }
-        val p = importer.preview(uid, source, inputs)
-        _preview.value = p
-        _task.value = DataTask.Idle
-        launch(Dispatchers.Main) { onReady() }
+        if (uris.size == 1 && inputs.singleOrNull()?.extension == "notea") {
+            restorePreview(uris[0], null, null, label, onReady)
+            return@launch
+        }
+        loadImportPreview(source, inputs, issues, onReady)
     }
 
     fun previewInputs(source: ImportSource, inputs: List<ImportInput>, label: String, onReady: () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
         _task.value = DataTask.Working(label)
-        _preview.value = importer.preview(uid, source, inputs)
-        _task.value = DataTask.Idle
-        launch(Dispatchers.Main) { onReady() }
+        loadImportPreview(source, inputs, emptyList(), onReady)
+    }
+
+    private suspend fun loadImportPreview(source: ImportSource, inputs: List<ImportInput>, issues: List<ImportIssue>, onReady: () -> Unit) {
+        try {
+            val preview = importer.preview(uid, source, inputs)
+            _preview.value = preview.copy(issues = issues + preview.issues)
+            _task.value = DataTask.Idle
+            kotlinx.coroutines.withContext(Dispatchers.Main) { onReady() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            _task.value = DataTask.ImportFailed
+        }
     }
 
     /** Pasted text: notes separated by a line with `---`. */
@@ -99,14 +119,20 @@ class DataViewModel(private val container: AppContainer, private val uid: String
     fun commit(folderName: String?) = viewModelScope.launch(Dispatchers.IO) {
         val p = _preview.value ?: return@launch
         _task.value = DataTask.Working("")
-        val folderId = folderName?.takeIf { it.isNotBlank() }?.let { n ->
-            (container.repository.findFolderByName(uid, n) ?: container.repository.createFolder(uid, n)).id
+        try {
+            val folderId = folderName?.takeIf { it.isNotBlank() }?.let { n ->
+                (container.repository.findFolderByName(uid, n) ?: container.repository.createFolder(uid, n)).id
+            }
+            val result = importer.commit(uid, p.source, p.candidates, folderId)
+            if (p.source == ImportSource.BACKUP) backups.finishRestore(uid, result.createdIds)
+            importer.clearTemp()
+            _preview.value = null
+            _task.value = DataTask.Done(result)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            _task.value = DataTask.ImportFailed
         }
-        val result = importer.commit(uid, p.source, p.candidates, folderId)
-        if (p.source == ImportSource.BACKUP) backups.finishRestore(uid, result.createdIds)
-        importer.clearTemp()
-        _preview.value = null
-        _task.value = DataTask.Done(result)
     }
 
     fun discardPreview() { _preview.value = null; importer.clearTemp() }

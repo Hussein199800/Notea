@@ -1,5 +1,7 @@
 package com.example.ui
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ui.editor.EditHistory
@@ -37,6 +39,26 @@ class EditorEngineTest {
 
     @Test fun plainPreview_stripsMarkers() {
         assertEquals("عنوان\nنص عريض ورابط", MarkdownEngine.plain("## عنوان\nنص **عريض** و[رابط](https://a.b)"))
+    }
+
+    @Test fun reader_keepsCodeAndRemovesFormattingMarkers() {
+        val source = "###### العنوان\n+ **أهلاً *يا صديقي***\n> `**value**`\n```txt\n- **literal**\n```\n\\*plain\\*"
+        assertEquals("العنوان\n• أهلاً يا صديقي\n**value**\n- **literal**\n*plain*", MarkdownEngine.plain(source))
+    }
+
+    @Test fun reader_linksKeepLabelsAndExcludeTrailingPunctuation() {
+        val palette = MarkdownEngine.Palette(Color.Gray, Color.Blue, Color.Gray, Color.Black)
+        val rendered = MarkdownEngine.render("[رابط](https://a.b/page_(2)) و(HTTPS://example.com/docs)، ثم `https://code.test`", palette)
+        assertEquals("رابط و(HTTPS://example.com/docs)، ثم https://code.test", rendered.text)
+        val links = rendered.getLinkAnnotations(0, rendered.length)
+        assertEquals(listOf("https://a.b/page_(2)", "HTTPS://example.com/docs"), links.map { (it.item as LinkAnnotation.Url).url })
+        assertEquals(listOf("رابط", "HTTPS://example.com/docs"), links.map { rendered.text.substring(it.start, it.end) })
+    }
+
+    @Test fun smartEnter_declinesUnchangedNewlineAndOversizedOrderedMarker() {
+        assertNull(MarkdownEngine.continueList(TextFieldValue("- أول\n"), TextFieldValue("- أول\nن", TextRange(6))))
+        val line = "999999999999. عنصر"
+        assertNull(MarkdownEngine.continueList(TextFieldValue(line), TextFieldValue("$line\n", TextRange(line.length + 1))))
     }
 
     @Test fun history_undoRedo_coalescesTyping() {

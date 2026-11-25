@@ -8,17 +8,22 @@ import com.example.data.backup.BackupException
 import com.example.data.backup.BackupManager
 import com.example.data.importer.DuplicateKind
 import com.example.data.importer.ImportAction
+import com.example.data.importer.ImportCandidate
+import com.example.data.importer.ImportContext
 import com.example.data.importer.ImportInput
 import com.example.data.importer.ImportManager
 import com.example.data.importer.ImportSource
 import com.example.data.importer.ImportWarning
 import com.example.data.local.AttachmentKind
+import com.example.data.local.BlockType
 import com.example.data.repository.AttachmentStore
+import com.example.data.repository.BlockDraft
 import com.example.data.repository.ChecklistDraft
 import com.example.data.repository.NoteDraft
 import com.example.data.repository.NoteRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -26,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -67,6 +73,17 @@ class ImportTest {
         assertTrue(c.body.contains("**مهم**")); assertTrue(c.createdAt!! < 1700000000000L)
     }
 
+    @Test fun markdown_preservesFencedTasks_andFirstChecklistItem() = runBlocking {
+        val first = "```md\n- [ ] inside code\n```\n- [x] مهمة"
+        val second = "- [ ] أولاً\nنص الملاحظة"
+        val p = im.preview("u", ImportSource.FILES, listOf(input("code.md", first.toByteArray()), input("tasks.md", second.toByteArray())))
+        val code = p.candidates.first { it.title == "code" }
+        assertEquals("```md\n- [ ] inside code\n```", code.body)
+        assertEquals("مهمة", code.checklist.single().text)
+        assertTrue(code.checklist.single().checked)
+        assertEquals("أولاً", p.candidates.first { it.title == "tasks" }.checklist.single().text)
+    }
+
     @Test fun html_huaweiStyle_withImagesInZip() = runBlocking {
         val html = """<html><head><title>رحلة</title><meta name="created" content="2022-03-04 10:00:00"></head><body>
             <h1>العنوان</h1><p>نص <b>عريض</b> و <i>مائل</i> و <u>مسطر</u></p>
@@ -81,6 +98,54 @@ class ImportTest {
         assertEquals(AttachmentKind.IMAGE, c.attachments.single().kind)
         assertTrue(ImportWarning.FORMATTING_LOST in c.warnings)
         assertTrue(c.createdAt != null)
+    }
+
+    @Test fun keepZip_preservesAttachments_andFallsBackToHtmlForMalformedJson() = runBlocking {
+        val pdf = "%PDF-1.4 keep".toByteArray()
+        val audio = byteArrayOf(10, 20, 30)
+        val note = """{"title":"رحلة","textContent":"ملاحظات","attachments":[
+            {"filePath":"photo%20+%20copy.png","mimetype":"image/png"},
+            {"filePath":"voice.mp3","mimetype":"audio/mpeg"},
+            {"filePath":"docs/map.pdf","mimetype":"application/pdf"},
+            {"filePath":"missing.png","mimetype":"image/png"}],"labels":[{"name":"رحلات"}]}"""
+        val bytes = zip(
+            "Takeout/Keep/note.JSON" to note.toByteArray(),
+            "Takeout/Keep/note.html" to "<title>HTML duplicate</title><p>copy</p>".toByteArray(),
+            "Takeout/Keep/photo + copy.png" to PNG,
+            "Takeout/Keep/voice.mp3" to audio,
+            "Takeout/Keep/docs/map.pdf" to pdf,
+            "Takeout/Keep/invalid.json" to "{ broken".toByteArray(),
+            "Takeout/Keep/invalid.html" to "<title>Fallback</title><p>محتوى</p>".toByteArray()
+        )
+        val p = im.preview("u", ImportSource.KEEP, listOf(input("takeout.zip", bytes)))
+        assertEquals(setOf("رحلة", "Fallback"), p.candidates.map { it.title }.toSet())
+        val n = p.candidates.first { it.title == "رحلة" }
+        assertEquals(listOf("رحلات"), n.tags)
+        assertEquals(listOf(AttachmentKind.IMAGE, AttachmentKind.AUDIO, AttachmentKind.PDF), n.attachments.map { it.kind })
+        assertTrue(ImportWarning.MISSING_RESOURCE in n.warnings)
+        val result = im.commit("u", ImportSource.KEEP, p.candidates)
+        assertEquals(3, result.attachments)
+        val saved = repo.attachmentsFor(result.createdIds.getValue(n.key))
+        assertArrayEquals(audio, repo.openAttachment("u", saved.first { it.kind == AttachmentKind.AUDIO }).use { it.readBytes() })
+        assertArrayEquals(pdf, repo.openAttachment("u", saved.first { it.kind == AttachmentKind.PDF }).use { it.readBytes() })
+    }
+
+    @Test fun zipLimit_discardsPartialEntryAndCountsHiddenEntries() {
+        val folder = File(ctx.cacheDir, "bounded_zip_test").apply { deleteRecursively(); mkdirs() }
+        try {
+            val bytes = zip("ok.txt" to "abc".toByteArray(), "partial.txt" to ByteArray(20), "later.txt" to "later".toByteArray())
+            val output = im.parseZip(input("notes.zip", bytes), ImportContext(folder), byteLimit = 10)
+            assertEquals(listOf("ok"), output.candidates.map { it.title })
+            assertEquals(ImportWarning.TRUNCATED, output.issues.single().warning)
+            assertEquals(1, folder.listFiles()!!.size)
+
+            val hidden = zip(".ignored" to ByteArray(20), "later.txt" to "later".toByteArray())
+            val noNotes = im.parseZip(input("hidden.zip", hidden), ImportContext(folder), byteLimit = 10)
+            assertTrue(noNotes.candidates.isEmpty())
+            assertEquals(ImportWarning.TRUNCATED, noNotes.issues.single().warning)
+        } finally {
+            folder.deleteRecursively()
+        }
     }
 
     @Test fun docx_samsungStyle() = runBlocking {
@@ -132,6 +197,22 @@ class ImportTest {
         val created = db.noteDao().getAllWithDetails("u").first { it.note.title == "جديد" }.note
         assertEquals(42L, created.createdAt); assertEquals("files", created.importSource)
         assertEquals(1, db.revisionDao().forNote("e1").size) // pre-merge snapshot
+    }
+
+    @Test fun merge_preservesBlocks_andAddsChecklistWithFreshIds() = runBlocking {
+        repo.save("u", NoteDraft(id = "withblocks", title = "خطة", blocks = listOf(
+            BlockDraft(id = "originaltext", type = BlockType.TEXT, text = "محتوى قديم"),
+            BlockDraft(id = "originalcheck", type = BlockType.CHECKLIST)
+        ), checklist = listOf(ChecklistDraft(id = "shareditem", text = "أول", blockId = "originalcheck"))))
+        val candidate = ImportCandidate("import", "note.md", "خطة", "محتوى جديد",
+            checklist = listOf(ChecklistDraft(id = "shareditem", text = "ثان")), duplicateOfId = "withblocks", action = ImportAction.MERGE)
+        val committed = im.commit("u", ImportSource.FILES, listOf(candidate))
+        assertEquals(1, committed.merged)
+        val updated = repo.getNote("withblocks")!!
+        assertEquals("محتوى قديم\n\nمحتوى جديد", updated.note.body)
+        assertEquals(setOf("أول", "ثان"), updated.checklist.map { it.text }.toSet())
+        assertEquals("originalcheck", updated.checklist.first { it.id == "shareditem" }.blockId)
+        assertTrue(updated.blocks.any { it.id == updated.checklist.first { it.text == "ثان" }.blockId && it.type == BlockType.CHECKLIST })
     }
 }
 
@@ -222,5 +303,57 @@ class BackupTest {
         assertTrue(vB.unlockWithPassphrase("u", "vault-pass".toCharArray()))
         val dec = repoB.decrypt("u", stored) as com.example.data.repository.DecryptResult.Plain
         assertEquals("PLAINTEXT-SECRET", dec.body)
+    }
+
+    @Test fun keepBoth_preservesOriginalChecklistAndBlockRows() = runBlocking {
+        val (_, repo, backup) = device()
+        repo.save("u", NoteDraft(id = "layout", title = "قائمة", blocks = listOf(
+            BlockDraft(id = "originaltext", type = BlockType.TEXT, text = "نص"),
+            BlockDraft(id = "originalcheck", type = BlockType.CHECKLIST)
+        ), checklist = listOf(ChecklistDraft(id = "originalitem", text = "مهمة", checked = true, blockId = "originalcheck"))))
+        val file = repo.addAttachment("u", "layout", AttachmentKind.FILE, "doc.bin", "application/octet-stream", byteArrayOf(42).inputStream())
+        val original = repo.toDraft("u", repo.getNote("layout")!!)!!
+        repo.save("u", original.copy(blocks = original.blocks!! + BlockDraft(id = "originalfile", type = BlockType.ATTACHMENT, attachmentId = file.id)))
+        val out = ByteArrayOutputStream()
+        backup.export("u", out, null)
+        val preview = backup.read("u", { out.toByteArray().inputStream() }, null)
+        val candidate = preview.candidates.single().copy(action = ImportAction.KEEP_BOTH)
+        val result = ImportManager(ctx, repo).commit("u", ImportSource.BACKUP, listOf(candidate))
+
+        val source = repo.getNote("layout")!!
+        val copy = repo.getNote(result.createdIds.getValue(candidate.key))!!
+        assertEquals("originalitem", source.checklist.single().id)
+        assertEquals(setOf("originaltext", "originalcheck", "originalfile"), source.blocks.map { it.id }.toSet())
+        assertTrue(source.blocks.none { block -> copy.blocks.any { it.id == block.id } })
+        assertEquals("مهمة", copy.checklist.single().text)
+        assertTrue(copy.checklist.single().checked)
+        assertEquals(copy.blocks.first { it.type == BlockType.CHECKLIST }.id, copy.checklist.single().blockId)
+        val copiedFile = copy.attachments.single()
+        assertEquals(copiedFile.id, copy.blocks.first { it.type == BlockType.ATTACHMENT }.attachmentId)
+        assertArrayEquals(byteArrayOf(42), repo.openAttachment("u", copiedFile).use { it.readBytes() })
+    }
+
+    @Test fun crossVaultRestore_noteAndAttachmentAreEncryptedOnFirstCommit() = runBlocking {
+        val dbA = inMemoryDb(); val vA = testVault(); val repoA = NoteRepository(dbA, vA, AttachmentStore(ctx))
+        vA.setUp("old", "old-pass".toCharArray())
+        repoA.save("old", NoteDraft(id = "secret", title = "سر", body = "SECRET BODY", isLocked = true, lockHint = "hint"))
+        val fileBytes = "SECRET ATTACHMENT".toByteArray()
+        repoA.addAttachment("old", "secret", AttachmentKind.FILE, "file.bin", "application/octet-stream", fileBytes.inputStream())
+        val bytes = ByteArrayOutputStream().also { BackupManager(ctx, dbA, repoA, vA).export("old", it, null) }.toByteArray()
+
+        val dbB = inMemoryDb(); val vB = testVault(); val repoB = NoteRepository(dbB, vB, AttachmentStore(ctx))
+        vB.setUp("new", "new-pass".toCharArray())
+        val backup = BackupManager(ctx, dbB, repoB, vB)
+        val preview = backup.read("new", { bytes.inputStream() }, null, "old-pass".toCharArray())
+        val result = ImportManager(ctx, repoB).commit("new", ImportSource.BACKUP, preview.candidates)
+        val saved = repoB.getNote(result.createdIds.getValue("secret"))!!
+        assertTrue(saved.note.isLocked)
+        assertEquals("hint", saved.note.lockHint)
+        assertEquals(vB.currentKeyId("new"), NoteCipher.keyIdOf(saved.note.body))
+        assertEquals("SECRET BODY", repoB.toDraft("new", saved)!!.body)
+        val file = saved.attachments.single()
+        assertTrue(file.encrypted)
+        assertTrue(NoteCipher.isEncryptedFile(repoB.attachments.file("new", file.localPath)))
+        assertArrayEquals(fileBytes, repoB.openAttachment("new", file).use { it.readBytes() })
     }
 }

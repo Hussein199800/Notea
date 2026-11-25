@@ -252,6 +252,7 @@ fun ImportCenterScreen(session: SessionViewModel, data: DataViewModel) {
             }
         }
         item { SourceCard(s.huaweiNotepad, s.huaweiSteps) { FilledTonalButton(onClick = { pick(ImportSource.HUAWEI) }) { Text(s.chooseFiles) } } }
+        item { SourceCard(s.googleKeep, s.keepSteps) { FilledTonalButton(onClick = { pick(ImportSource.KEEP) }) { Text(s.chooseFiles) } } }
         item { SourceCard(s.otherFiles, s.otherSteps) { FilledTonalButton(onClick = { pick(ImportSource.FILES) }) { Text(s.chooseFiles) } } }
     }
     TaskOverlay(task, data) { session.navigate(Screen.ImportPreview) }
@@ -311,6 +312,8 @@ fun TaskOverlay(task: DataTask, data: DataViewModel, onRestoreReady: () -> Unit 
                 else -> s.notABackup
             })
         })
+        DataTask.ImportFailed -> AlertDialog(onDismissRequest = { data.reset() },
+            confirmButton = { TextButton(onClick = { data.reset() }) { Text(s.ok) } }, text = { Text(s.importFailed) })
         else -> Unit
     }
 }
@@ -324,7 +327,11 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
     var intoFolder by remember { mutableStateOf(false) }
     var folderName by remember(preview?.source) {
         mutableStateOf(when (preview?.source) {
-            ImportSource.SAMSUNG -> s.samsungNotes; ImportSource.XIAOMI -> s.xiaomiNotes; ImportSource.HUAWEI -> s.huaweiNotepad; else -> s.importCenter
+            ImportSource.SAMSUNG -> s.samsungNotes
+            ImportSource.XIAOMI -> s.xiaomiNotes
+            ImportSource.HUAWEI -> s.huaweiNotepad
+            ImportSource.KEEP -> s.googleKeep
+            else -> s.importCenter
         })
     }
     val p = preview
@@ -376,12 +383,12 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
                                 c.updatedAt?.let { s.date(it, false) },
                                 if (c.checklist.isNotEmpty()) "${s.num(c.checklist.size)} ${s.typeChecklist}" else null,
                                 if (c.attachments.isNotEmpty()) "${s.num(c.attachments.size)} ${s.attachments}" else null,
-                                if (c.storedLocked != null) s.typeLocked else null
+                                if (c.isLocked) s.typeLocked else null
                             ).joinToString(" • ")
                             if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    val bodyPreview = com.example.ui.editor.MarkdownEngine.plain(c.body).take(20_000)
+                    val bodyPreview = if (c.isLocked) "" else com.example.ui.editor.MarkdownEngine.plain(c.body).take(20_000)
                     if (bodyPreview.isNotBlank()) ExpandableText(bodyPreview, collapsedLines = 3, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 48.dp))
                     c.warnings.forEach { w -> Text("⚠ " + s.warning(w), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 48.dp, top = 4.dp)) }
@@ -390,7 +397,7 @@ fun ImportPreviewScreen(session: SessionViewModel, data: DataViewModel) {
                             color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 48.dp, top = 6.dp))
                         FlowRow(Modifier.padding(start = 48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilterChip(c.action == ImportAction.SKIP, { data.setAction(c.key, ImportAction.SKIP) }, { Text(s.skip) })
-                            if (c.duplicateOfId != null && c.storedLocked == null) FilterChip(c.action == ImportAction.MERGE, { data.setAction(c.key, ImportAction.MERGE) }, { Text(s.merge) })
+                            if (c.canMerge) FilterChip(c.action == ImportAction.MERGE, { data.setAction(c.key, ImportAction.MERGE) }, { Text(s.merge) })
                             FilterChip(c.action == ImportAction.KEEP_BOTH, { data.setAction(c.key, ImportAction.KEEP_BOTH) }, { Text(s.keepBoth) })
                         }
                     }

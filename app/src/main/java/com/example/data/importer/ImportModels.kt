@@ -6,7 +6,9 @@ import java.io.File
 import java.io.InputStream
 
 /** Where the files come from. Parsing is format based; the source only adds guidance and a label. */
-enum class ImportSource(val key: String) { SAMSUNG("samsung"), XIAOMI("xiaomi"), HUAWEI("huawei"), FILES("files"), SHARE("share"), BACKUP("notea") }
+enum class ImportSource(val key: String) {
+    SAMSUNG("samsung"), XIAOMI("xiaomi"), HUAWEI("huawei"), KEEP("keep"), FILES("files"), SHARE("share"), BACKUP("notea")
+}
 
 enum class ImportWarning {
     /** Some formatting (tables, fonts, colours, drawings) could not be converted. */
@@ -66,6 +68,10 @@ data class ImportCandidate(
     val colorIndex: Int = 0,
     val attachments: List<ImportedAttachment> = emptyList(),
     val warnings: Set<ImportWarning> = emptySet(),
+    /** The source note was locked. Its decrypted content must be encrypted on the first save. */
+    val requiresEncryption: Boolean = false,
+    val lockPinHash: String = "",
+    val lockHint: String = "",
     /** Present for locked notes restored from a .notea backup: the stored (encrypted) form. */
     val storedLocked: NoteEntity? = null,
     val reminderAt: Long? = null,
@@ -76,6 +82,8 @@ data class ImportCandidate(
     val action: ImportAction = ImportAction.IMPORT
 ) {
     val isEmpty get() = title.isBlank() && body.isBlank() && checklist.isEmpty() && attachments.isEmpty() && storedLocked == null
+    val isLocked get() = storedLocked != null || requiresEncryption || body.isEncryptedPayload()
+    val canMerge get() = !isLocked && duplicateOfId != null
 }
 
 /** A file to import (from SAF, a share intent or an archive entry). */
@@ -84,6 +92,7 @@ class ImportInput(
     val mime: String,
     val lastModified: Long?,
     val sizeBytes: Long,
+    internal val stagedFile: File? = null,
     private val opener: () -> InputStream
 ) {
     fun open(): InputStream = opener()
@@ -91,6 +100,11 @@ class ImportInput(
 }
 
 data class ImportIssue(val sourceName: String, val warning: ImportWarning, val detail: String = "")
+
+internal fun Exception.toImportIssue(name: String): ImportIssue {
+    if (this is kotlinx.coroutines.CancellationException) throw this
+    return ImportIssue(name, if (this is ImportLimitExceeded) ImportWarning.TRUNCATED else ImportWarning.UNREADABLE, message.orEmpty())
+}
 
 data class ImportPreview(
     val source: ImportSource,
