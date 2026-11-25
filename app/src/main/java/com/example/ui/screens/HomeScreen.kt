@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
@@ -59,7 +61,6 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.ViewQuilt
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,14 +71,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -144,17 +141,18 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
     val tags by vm.tags.collectAsState()
     val prefs by session.prefs.collectAsState()
     val memory by vm.memory.collectAsState()
-    val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     var actionsFor by remember { mutableStateOf<NoteCardModel?>(null) }
+    // Multi-select: long press starts it, taps add/remove, back or ✕ ends it.
+    var selection by remember { mutableStateOf(emptySet<String>()) }
+    fun toggle(id: String) { selection = if (id in selection) selection - id else selection + id }
+    androidx.compose.runtime.LaunchedEffect(filter.view, filter.folderId, filter.tagId) { selection = emptySet() }
     var unlockFor by remember { mutableStateOf<NoteCardModel?>(null) }
     var showTemplates by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var confirmEmptyTrash by remember { mutableStateOf(false) }
-    var folderDialog by remember { mutableStateOf<FolderEntity?>(null) }
-    var newFolderDialog by remember { mutableStateOf(false) }
-    var folderMenu by remember { mutableStateOf<FolderEntity?>(null) }
+    var confirmDeleteMany by remember { mutableStateOf<List<String>?>(null) }
 
     val deviceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val target = unlockFor
@@ -180,51 +178,15 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
         }
     }
 
-    ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-        ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-            LazyColumn(contentPadding = PaddingValues(vertical = 12.dp)) {
-                item {
-                    Row(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        NoteaMark(Modifier.size(36.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text(s.appName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                fun close() = scope.launch { drawer.close() }
-                item {
-                    DrawerItem(Icons.Rounded.Notes, s.allNotes, filter.view == HomeView.ALL && filter.folderId == null && filter.tagId == null) { vm.showView(HomeView.ALL); close() }
-                    DrawerItem(Icons.Rounded.Star, s.favorites, filter.view == HomeView.FAVORITES) { vm.showView(HomeView.FAVORITES); close() }
-                    DrawerItem(Icons.Rounded.Notifications, s.reminders, filter.view == HomeView.REMINDERS) { vm.showView(HomeView.REMINDERS); close() }
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.folders, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { newFolderDialog = true }) { Icon(Icons.Rounded.Add, s.newFolder) }
-                    }
-                }
-                items(folders, key = { it.id }) { f ->
-                    Box {
-                        DrawerItem(Icons.Rounded.Folder, f.name, filter.folderId == f.id, onLongClick = { folderMenu = f }) { vm.showFolder(f.id); close() }
-                        DropdownMenu(expanded = folderMenu?.id == f.id, onDismissRequest = { folderMenu = null }) {
-                            DropdownMenuItem(text = { Text(s.rename) }, onClick = { folderDialog = f; folderMenu = null })
-                            DropdownMenuItem(text = { Text(s.delete) }, onClick = { vm.deleteFolder(f.id); folderMenu = null })
-                        }
-                    }
-                }
-                if (tags.isNotEmpty()) {
-                    item { Text(s.tags, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 4.dp)) }
-                    items(tags, key = { it.id }) { t ->
-                        DrawerItem(Icons.AutoMirrored.Rounded.Label, t.name, filter.tagId == t.id) { vm.showTag(t.id); close() }
-                    }
-                }
-                item {
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                    DrawerItem(Icons.Rounded.Archive, s.archive, filter.view == HomeView.ARCHIVE) { vm.showView(HomeView.ARCHIVE); close() }
-                    DrawerItem(Icons.Rounded.DeleteOutline, s.trash, filter.view == HomeView.TRASH) { vm.showView(HomeView.TRASH); close() }
-                    DrawerItem(Icons.Rounded.Settings, s.settings, false) { session.navigate(Screen.Settings); close() }
-                }
-            }
-        }
-    }) {
+    // Back first clears a search, then leaves a folder/tag/archive/trash view (back to all notes).
+    androidx.activity.compose.BackHandler(enabled = filter.query.isNotEmpty() || filter.folderId != null || filter.tagId != null ||
+        filter.view !in setOf(HomeView.ALL, HomeView.FAVORITES)) {
+        if (filter.query.isNotEmpty()) vm.setFilter { it.copy(query = "") } else vm.showView(HomeView.ALL)
+    }
+
+    androidx.activity.compose.BackHandler(enabled = selection.isNotEmpty()) { selection = emptySet() }
+
+    run {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 // Search bar
@@ -233,7 +195,7 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 56.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                        IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Rounded.Menu, s.menu) }
+                        Spacer(Modifier.width(12.dp))
                         Box(Modifier.weight(1f)) {
                             if (filter.query.isEmpty()) Text(s.searchHint, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
                             BasicTextField(
@@ -244,13 +206,39 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         }
                         if (filter.query.isNotEmpty()) IconButton(onClick = { vm.setFilter { it.copy(query = "") } }) { Icon(Icons.Rounded.Close, s.clearFilters) }
                         else Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (session.container.assistantReady()) IconButton(onClick = { session.navigate(Screen.AskNotes) }) {
+                            Icon(Icons.Rounded.AutoAwesome, s.askLibrary, tint = com.example.ui.theme.Concept.ASSISTANT.g2)
+                        }
                         IconButton(onClick = { showFilters = true }) {
                             Icon(Icons.Rounded.Tune, s.filters, tint = if (filter.hasRefinements) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
+                if (selection.isNotEmpty()) {
+                    val all = state.pinned + state.others
+                    val picked = all.filter { it.note.id in selection }
+                    val ids = picked.map { it.note.id }
+                    SelectionBar(
+                        count = picked.size, inTrash = filter.view == HomeView.TRASH,
+                        allPinned = picked.all { it.note.isPinned }, allFavorite = picked.all { it.note.isFavorite }, allArchived = picked.all { it.note.isArchived },
+                        onClose = { selection = emptySet() },
+                        onSelectAll = { selection = all.map { it.note.id }.toSet() },
+                        onPin = { vm.setPinnedMany(ids, !picked.all { it.note.isPinned }); selection = emptySet() },
+                        onFavorite = { vm.setFavoriteMany(ids, !picked.all { it.note.isFavorite }); selection = emptySet() },
+                        onArchive = { vm.setArchivedMany(ids, !picked.all { it.note.isArchived }); selection = emptySet() },
+                        onTrash = {
+                            vm.trashMany(ids); selection = emptySet()
+                            session.messageWithUndo(if (ids.size == 1) s.movedToTrash else s.movedManyToTrash(ids.size)) { vm.restoreMany(ids) }
+                        },
+                        onRestore = { vm.restoreMany(ids); selection = emptySet() },
+                        onDeleteForever = { confirmDeleteMany = ids },
+                        onMore = if (picked.size == 1) ({ actionsFor = picked.first(); selection = emptySet() }) else null
+                    )
+                }
                 // Title row
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val filtered = filter.folderId != null || filter.tagId != null || filter.view !in setOf(HomeView.ALL, HomeView.FAVORITES)
+                Row(Modifier.fillMaxWidth().padding(start = if (filtered) 4.dp else 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (filtered) IconButton(onClick = { vm.showView(HomeView.ALL) }) { Icon(Icons.Rounded.Close, s.allNotes) }
                     Text(viewTitle, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     if (filter.isSearching) Text(s.results(state.pinned.size + state.others.size), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -268,6 +256,11 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         Icon(if (prefs.gridView) Icons.Rounded.ViewAgenda else Icons.Rounded.GridView, if (prefs.gridView) s.listView else s.gridView)
                     }
                     if (filter.view == HomeView.TRASH && state.others.isNotEmpty()) TextButton(onClick = { confirmEmptyTrash = true }) { Text(s.emptyTrash, color = MaterialTheme.colorScheme.error) }
+                }
+                if (!filtered && !filter.isSearching && selection.isEmpty()) Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(filter.view == HomeView.ALL, onClick = { vm.showView(HomeView.ALL) }, label = { Text(s.allNotes) })
+                    FilterChip(filter.view == HomeView.FAVORITES, onClick = { vm.showView(HomeView.FAVORITES) }, label = { Text(s.favorites) },
+                        leadingIcon = { Icon(Icons.Rounded.Star, null, Modifier.size(16.dp)) })
                 }
                 if (filter.hasRefinements) {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -305,17 +298,19 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                         if (state.pinned.isNotEmpty()) {
                             item(span = StaggeredGridItemSpan.FullLine) { Header(s.pinned) }
                             items(state.pinned, key = { it.note.id }) { m ->
-                                NoteCard(m, m.note.id == selectedNoteId, Modifier.animateItem(), onClick = { open(m) }, onLongClick = { actionsFor = m })
+                                NoteCard(m, m.note.id == selectedNoteId || m.note.id in selection, Modifier.animateItem(),
+                                onClick = { if (selection.isNotEmpty()) toggle(m.note.id) else open(m) }, onLongClick = { toggle(m.note.id) })
                             }
                             item(span = StaggeredGridItemSpan.FullLine) { Header(s.others) }
                         }
                         items(state.others, key = { it.note.id }) { m ->
-                            NoteCard(m, m.note.id == selectedNoteId, Modifier.animateItem(), onClick = { open(m) }, onLongClick = { actionsFor = m })
+                            NoteCard(m, m.note.id == selectedNoteId || m.note.id in selection, Modifier.animateItem(),
+                                onClick = { if (selection.isNotEmpty()) toggle(m.note.id) else open(m) }, onLongClick = { toggle(m.note.id) })
                         }
                     }
                 }
             }
-            if (filter.view != HomeView.TRASH && filter.view != HomeView.ARCHIVE) {
+            if (filter.view != HomeView.TRASH && filter.view != HomeView.ARCHIVE && selection.isEmpty()) {
                 Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SmallFloatingActionButton(onClick = { vm.createNote({ NoteDraft(id = it) }) { id -> session.navigate(Screen.Editor(id, isNew = true, startScan = true)) } },
@@ -346,9 +341,10 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
             )
         }
     }
+    confirmDeleteMany?.let { ids ->
+        ConfirmDialog(s.deleteForever, s.deleteForeverConfirm, s.deleteForever, true, { vm.deleteForeverMany(ids); selection = emptySet() }) { confirmDeleteMany = null }
+    }
     if (confirmEmptyTrash) ConfirmDialog(s.emptyTrash, s.emptyTrashConfirm, s.deleteForever, true, { vm.emptyTrash() }) { confirmEmptyTrash = false }
-    if (newFolderDialog) TextInputDialog(s.newFolder, s.folderName, "", s.save, { vm.createFolder(it) }) { newFolderDialog = false }
-    folderDialog?.let { f -> TextInputDialog(s.rename, s.folderName, f.name, s.save, { vm.renameFolder(f.id, it) }) { folderDialog = null } }
 
     if (showFilters) {
         ModalBottomSheet(onDismissRequest = { showFilters = false }, sheetState = rememberModalBottomSheetState(true)) {
@@ -413,25 +409,25 @@ fun HomeScreen(session: SessionViewModel, vm: HomeViewModel, selectedNoteId: Str
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 val close = { actionsFor = null }
                 if (m.note.trashedAt != null) {
-                    SheetRow(Icons.Rounded.Restore, s.restore) { vm.restore(m.note.id); close() }
-                    SheetRow(Icons.Rounded.DeleteForever, s.deleteForever) { confirmDelete = true }
+                    SheetRow(Icons.Rounded.Restore, s.restore, com.example.ui.theme.Concept.NOTES.g2) { vm.restore(m.note.id); close() }
+                    SheetRow(Icons.Rounded.DeleteForever, s.deleteForever, com.example.ui.theme.Concept.TRASH.t2) { confirmDelete = true }
                 } else {
-                    SheetRow(Icons.Rounded.PushPin, if (m.note.isPinned) s.unpin else s.pin) { vm.togglePin(m); close() }
-                    SheetRow(if (m.note.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (m.note.isFavorite) s.unfavorite else s.favorite) { vm.toggleFavorite(m); close() }
-                    SheetRow(Icons.Rounded.Palette, s.color) { colorMode = !colorMode }
+                    SheetRow(Icons.Rounded.PushPin, if (m.note.isPinned) s.unpin else s.pin, com.example.ui.theme.Concept.SECURITY.g2) { vm.togglePin(m); close() }
+                    SheetRow(if (m.note.isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (m.note.isFavorite) s.unfavorite else s.favorite, com.example.ui.theme.Concept.TASKS.g2) { vm.toggleFavorite(m); close() }
+                    SheetRow(Icons.Rounded.Palette, s.color, com.example.ui.theme.Concept.ASSISTANT.g2) { colorMode = !colorMode }
                     AnimatedVisibility(colorMode) { Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { ColorPicker(m.note.colorIndex) { vm.setColor(m.note.id, it); close() } } }
-                    SheetRow(Icons.Rounded.Folder, s.moveToFolder) { folderMode = !folderMode }
+                    SheetRow(Icons.Rounded.Folder, s.moveToFolder, com.example.ui.theme.Concept.FOLDERS.g2) { folderMode = !folderMode }
                     AnimatedVisibility(folderMode) {
                         FlowRow(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(m.note.folderId == null, onClick = { vm.moveToFolder(m.note.id, null); close() }, label = { Text(s.noFolder) })
                             folders.forEach { f -> FilterChip(m.note.folderId == f.id, onClick = { vm.moveToFolder(m.note.id, f.id); close() }, label = { Text(f.name) }) }
                         }
                     }
-                    if (!m.note.isLocked) SheetRow(Icons.Rounded.Share, s.share) {
+                    if (!m.note.isLocked) SheetRow(Icons.Rounded.Share, s.share, com.example.ui.theme.Concept.REMINDERS.g2) {
                         vm.plainTextForShare(m.details)?.let { FileOpener.shareText(context, m.note.title, it) }; close()
                     }
-                    SheetRow(if (m.note.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (m.note.isArchived) s.unarchive else s.archiveAction) { vm.toggleArchive(m); close() }
-                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash) { vm.trash(m.note.id); session.message(s.movedToTrash); close() }
+                    SheetRow(if (m.note.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (m.note.isArchived) s.unarchive else s.archiveAction, com.example.ui.theme.Concept.ARCHIVE.g2) { vm.toggleArchive(m); close() }
+                    SheetRow(Icons.Rounded.DeleteOutline, s.moveToTrash, com.example.ui.theme.Concept.TRASH.g2) { val id = m.note.id; vm.trash(id); session.messageWithUndo(s.movedToTrash) { vm.restore(id) }; close() }
                 }
             }
         }
@@ -445,21 +441,12 @@ private fun Header(text: String) {
 }
 
 @Composable
-private fun DrawerItem(icon: ImageVector, label: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    NavigationDrawerItem(
-        icon = { Icon(icon, null) }, label = { Text(label, modifier = Modifier.padding(vertical = 6.dp)) }, selected = selected, onClick = onClick,
-        badge = if (onLongClick != null) { { IconButton(onClick = onLongClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.MoreVert, null, Modifier.size(18.dp)) } } } else null,
-        modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 56.dp)
-    )
-}
-
-@Composable
-fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+fun SheetRow(icon: ImageVector, label: String, tint: androidx.compose.ui.graphics.Color? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, null, tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(18.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
@@ -491,6 +478,38 @@ private fun MemoryCard(m: com.example.core.memory.NoteMemory.Resurface, onOpen: 
                 TextButton(onClick = onOpen) { Text(s.open) }
                 TextButton(onClick = onHide) { Text(s.hideToday) }
             }
+        }
+    }
+}
+
+/** Top bar shown while notes are selected (long press). Every action applies to all selected notes. */
+@Composable
+private fun SelectionBar(
+    count: Int, inTrash: Boolean, allPinned: Boolean, allFavorite: Boolean, allArchived: Boolean,
+    onClose: () -> Unit, onSelectAll: () -> Unit, onPin: () -> Unit, onFavorite: () -> Unit, onArchive: () -> Unit,
+    onTrash: () -> Unit, onRestore: () -> Unit, onDeleteForever: () -> Unit, onMore: (() -> Unit)?
+) {
+    val s = LocalStrings.current
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, s.cancel) }
+            Text(s.selectedCount(count), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+            IconButton(onClick = onSelectAll) { Icon(Icons.Rounded.SelectAll, s.selectAll) }
+          }
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            if (inTrash) {
+                IconButton(onClick = onRestore) { Icon(Icons.Rounded.Restore, s.restore, tint = com.example.ui.theme.Concept.NOTES.g2) }
+                IconButton(onClick = onDeleteForever) { Icon(Icons.Rounded.DeleteForever, s.deleteForever, tint = com.example.ui.theme.Concept.TRASH.t2) }
+            } else {
+                IconButton(onClick = onPin) { Icon(Icons.Rounded.PushPin, if (allPinned) s.unpin else s.pin, tint = com.example.ui.theme.Concept.SECURITY.g2) }
+                IconButton(onClick = onFavorite) { Icon(if (allFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline, if (allFavorite) s.unfavorite else s.favorite, tint = com.example.ui.theme.Concept.TASKS.g2) }
+                IconButton(onClick = onArchive) { Icon(if (allArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (allArchived) s.unarchive else s.archiveAction, tint = com.example.ui.theme.Concept.ARCHIVE.g2) }
+                IconButton(onClick = onTrash) { Icon(Icons.Rounded.DeleteOutline, s.moveToTrash, tint = com.example.ui.theme.Concept.TRASH.g2) }
+                if (onMore != null) IconButton(onClick = onMore) { Icon(Icons.Rounded.MoreVert, s.more) }
+            }
+          }
         }
     }
 }

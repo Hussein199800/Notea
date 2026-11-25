@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -90,8 +91,10 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
     val user by (auth?.authStateFlow() ?: flowOf(null)).collectAsStateWithLifecycle(initialValue = auth?.currentUser)
 
     NoteaTheme(dark) {
+      com.example.ui.theme.ScaledLayout(prefs.textScale) {
         CompositionLocalProvider(LocalStrings provides strings, LocalLayoutDirection provides if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                CrashReportDialog()
                 val u = user
                 val signIn: (() -> Unit)? = if (auth != null) ({ setLocal(false) }) else null
                 when {
@@ -109,6 +112,7 @@ fun NoteaRoot(container: AppContainer, incoming: Flow<IncomingIntent>, consumeIn
                 }
             }
         }
+      }
     }
 }
 
@@ -138,7 +142,13 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
         lifecycle.lifecycle.addObserver(obs)
         onDispose { lifecycle.lifecycle.removeObserver(obs) }
     }
-    LaunchedEffect(session) { session.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(session) {
+        session.messages.collect { m ->
+            val r = snackbar.showSnackbar(m.text, actionLabel = if (m.undo != null) s.undo else null, withDismissAction = m.undo != null,
+                duration = if (m.undo != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) m.undo?.invoke()
+        }
+    }
     LaunchedEffect(session) { session.maybeShowWelcome() }
 
     // Share sheet / widget / notification entry points.
@@ -156,6 +166,7 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     val note = container.db.noteDao().getNote(intent.noteId)
                     if (note != null && (!note.isLocked || session.isOpened(note.id))) { session.home(); session.navigate(Screen.Editor(note.id)) } else session.home()
                 }
+                IncomingIntent.OpenUpdate -> { session.home(); session.navigate(Screen.Update) }
                 IncomingIntent.NewNote -> home.createNote({ NoteDraft(id = it) }) { id -> session.home(); session.navigate(Screen.Editor(id, isNew = true)) }
                 is IncomingIntent.NewNoteWithText -> home.createNote({ NoteDraft(id = it, title = intent.title, body = intent.body) }) { id -> session.navigate(Screen.Editor(id)) }
             }
@@ -175,6 +186,8 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
+        // Rail when the screen is wider than tall (phone landscape) or a tablet; bottom bar otherwise.
+        val railNav = maxWidth >= 600.dp || maxWidth > maxHeight
         val listWidth = maxWidth * 0.42f
         val editorTop = top as? Screen.Editor
         val openNote: (String, Boolean) -> Unit = { id, isNew ->
@@ -183,7 +196,9 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
         if (wide && (top is Screen.Home || editorTop != null)) {
             // Tablet / foldable: list + editor side by side.
             Row(Modifier.fillMaxSize()) {
-                Box(Modifier.width(listWidth).fillMaxHeight()) { HomeScreen(session, home, editorTop?.noteId, openNote) }
+              com.example.ui.screens.TabsChrome(session, home, rail = true) {
+                Row(Modifier.fillMaxSize()) {
+                Box(Modifier.width(listWidth).fillMaxHeight()) { com.example.ui.screens.TabContent(session, home, editorTop?.noteId, openNote) }
                 VerticalDivider()
                 Box(Modifier.fillMaxSize()) {
                     if (editorTop != null) EditorHost(container, session, uid, editorTop, folders)
@@ -191,13 +206,15 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                         com.example.ui.screens.NoteaMark(Modifier.width(120.dp).fillMaxHeight(0.2f))
                     }
                 }
+                }
+              }
             }
         } else {
             AnimatedContent(top, transitionSpec = {
                 (fadeIn() + slideInHorizontally { it / 12 }) togetherWith fadeOut()
             }, contentKey = { it::class to ((it as? Screen.Editor)?.noteId ?: "") }, label = "nav") { screen ->
                 when (screen) {
-                    Screen.Home -> HomeScreen(session, home, null, openNote)
+                    Screen.Home -> com.example.ui.screens.TabsChrome(session, home, rail = railNav) { com.example.ui.screens.TabContent(session, home, null, openNote) }
                     is Screen.Editor -> EditorHost(container, session, uid, screen, folders)
                     Screen.Settings -> SettingsScreen(session, email, onSignOut = {
                         session.signOut { com.example.auth.signOut(context, CredentialManager.create(context), {}, scope) }
@@ -209,10 +226,21 @@ private fun SessionContent(container: AppContainer, uid: String, email: String?,
                     is Screen.Welcome -> com.example.ui.screens.WelcomeScreen(session, screen.firstRun) { session.markOnboarded(); session.back() }
                     Screen.Transfer -> com.example.ui.screens.TransferScreen(session, data)
                     Screen.AssistantSettings -> com.example.ui.screens.AssistantSettingsScreen(session)
+                    Screen.Releases -> com.example.ui.screens.ReleasesScreen(session)
+                    Screen.Diagnostics -> com.example.ui.screens.DiagnosticsScreen(session)
+                    Screen.Update -> com.example.ui.screens.UpdateScreen(session)
+                    Screen.AskNotes -> com.example.ui.screens.AskNotesScreen(session)
                 }
             }
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        val help by session.help.collectAsState()
+        if (top is Screen.Home) when (help) {
+            SessionViewModel.HelpPrompt.TOUR -> com.example.ui.screens.TourDialog { session.dismissHelp() }
+            SessionViewModel.HelpPrompt.WHATS_NEW -> com.example.ui.screens.WhatsNewDialog(onAll = { session.dismissHelp(); session.navigate(Screen.Releases) }) { session.dismissHelp() }
+            null -> Unit
+        }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+            .padding(bottom = if (top is Screen.Home && !railNav && !wide) 80.dp else 0.dp))
     }
 }
 
@@ -280,4 +308,33 @@ private fun LinkLocalData(container: AppContainer, uid: String, content: @Compos
 private fun LinkToast(msg: String) {
     val ctx = LocalContext.current
     androidx.compose.runtime.LaunchedEffect(msg) { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show() }
+}
+
+/** Shows the reason of the last unexpected close once, with a share button. */
+@Composable
+private fun CrashReportDialog() {
+    val s = LocalStrings.current
+    val ctx = LocalContext.current
+    var report by remember { mutableStateOf(com.example.core.CrashReporter.pending(ctx)) }
+    val r = report ?: return
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { com.example.core.CrashReporter.markSeen(ctx); report = null },
+        title = { Text(s.crashTitle) },
+        text = {
+            androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                com.example.ui.components.ExpandableText(s.crashBody, collapsedLines = 4)
+                androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    com.example.ui.components.ExpandableText(r, collapsedLines = 8, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                com.example.ui.platform.FileOpener.shareText(ctx, "Notea crash report", r)
+                com.example.core.CrashReporter.markSeen(ctx); report = null
+            }) { Text(s.shareReport) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { com.example.core.CrashReporter.markSeen(ctx); report = null }) { Text(s.close) } }
+    )
 }

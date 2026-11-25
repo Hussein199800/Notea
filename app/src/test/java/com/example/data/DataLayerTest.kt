@@ -9,9 +9,12 @@ import com.example.core.testVault
 import com.example.core.security.NoteCipher
 import com.example.data.legacy.LegacyUpgrader
 import com.example.data.local.MIGRATION_1_2
+import com.example.data.local.AttachmentKind
+import com.example.data.local.BlockType
 import com.example.data.local.NoteaDatabase
 import com.example.data.local.SyncState
 import com.example.data.repository.AttachmentStore
+import com.example.data.repository.BlockDraft
 import com.example.data.repository.ChecklistDraft
 import com.example.data.repository.DecryptResult
 import com.example.data.repository.NoteDraft
@@ -110,6 +113,29 @@ class MigrationV3Test {
 }
 
 @RunWith(RobolectricTestRunner::class)
+class MigrationV4Test {
+    @get:Rule
+    val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), NoteaDatabase::class.java)
+
+    @Test
+    fun v3ToV4_isAdditive_keepsNotes_noParentNoIcon() = runBlocking {
+        val name = "v4-test.db"
+        helper.createDatabase(name, 3).apply {
+            execSQL("INSERT INTO notes (id,userId,title,body,colorIndex,folderId,isPinned,isFavorite,isArchived,trashedAt,isLocked,lockPinHash,lockHint,createdAt,updatedAt,syncState,deleted,baseRemoteUpdatedAt,legacyCategory,legacyPending,importSource,contentHash) VALUES ('n','u','عنوان','نص',2,NULL,1,0,0,NULL,0,'','',1,2,0,0,2,'',0,'','')")
+            execSQL("INSERT INTO note_blocks VALUES ('b','n',0,'text','نص',NULL)")
+            close()
+        }
+        helper.runMigrationsAndValidate(name, 4, true, com.example.data.local.MIGRATION_3_4).close()
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.databaseBuilder(ctx, NoteaDatabase::class.java, name).addMigrations(*NoteaDatabase.ALL_MIGRATIONS).allowMainThreadQueries().build()
+        val d = db.noteDao().getNoteWithDetails("n")!!
+        assertEquals("نص", d.note.body); assertEquals(2, d.note.colorIndex); assertTrue(d.note.isPinned)
+        assertNull(d.note.parentId); assertEquals("", d.note.icon); assertEquals(1, d.blocks.size)
+        db.close()
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
 class RepositoryTest {
     private val ctx = ApplicationProvider.getApplicationContext<Context>()
     private val db = inMemoryDb()
@@ -117,6 +143,41 @@ class RepositoryTest {
     private val repo = NoteRepository(db, vault, AttachmentStore(ctx))
 
     @After fun close() = db.close()
+
+    @Test fun subNotes_parentKeptOnSave_cyclesRefused_iconStored() = runBlocking {
+        repo.save("u", NoteDraft(id = "p", title = "مشروع"))
+        repo.save("u", NoteDraft(id = "c", title = "مهمة فرعية", parentId = "p", icon = "📌"))
+        repo.save("u", NoteDraft(id = "g", title = "حفيد", parentId = "c"))
+        assertEquals("p", db.noteDao().getNote("c")!!.parentId)
+        assertEquals("📌", db.noteDao().getNote("c")!!.icon)
+        // Editing the child (draft from toDraft) keeps its parent and icon.
+        val d = repo.toDraft("u", repo.getNote("c")!!)!!
+        repo.save("u", d.copy(body = "تعديل", updatedAt = null))
+        assertEquals("p", db.noteDao().getNote("c")!!.parentId); assertEquals("📌", db.noteDao().getNote("c")!!.icon)
+        // A draft without parent info (e.g. older code paths) keeps the stored parent.
+        repo.save("u", NoteDraft(id = "c", title = "مهمة فرعية", body = "x"))
+        assertEquals("p", db.noteDao().getNote("c")!!.parentId)
+        // Cycles: p under its grandchild is refused; moving to top level works.
+        assertFalse(repo.setParent("u", "p", "g"))
+        assertNull(db.noteDao().getNote("p")!!.parentId)
+        assertTrue(repo.setParent("u", "g", null)); assertNull(db.noteDao().getNote("g")!!.parentId)
+        assertFalse(repo.setParent("u", "c", "c"))
+    }
+
+    @Test fun toggleAndCalloutText_isPartOfBody() = runBlocking {
+        val blocks = listOf(
+            com.example.data.repository.BlockDraft("t", com.example.data.local.BlockType.TEXT, "مقدمة"),
+            com.example.data.repository.BlockDraft("g", com.example.data.local.BlockType.TOGGLE, "التفاصيل\nمخفي"),
+            com.example.data.repository.BlockDraft("k", com.example.data.local.BlockType.CALLOUT, "مهم جداً")
+        )
+        repo.save("u", NoteDraft(id = "b", title = "كتل", blocks = blocks))
+        val n = db.noteDao().getNoteWithDetails("b")!!
+        assertEquals("مقدمة\n\nالتفاصيل\nمخفي\n\nمهم جداً", n.note.body)
+        assertEquals(listOf("text", "toggle", "callout"), n.blocks.sortedBy { it.position }.map { it.type })
+        // Sync layout round-trip keeps toggle/callout text.
+        val layout = blocks.map { Triple(it.id, it.type, it.text.length as Any?) }
+        assertEquals(blocks, com.example.data.repository.Blocks.fromLayout(layout, n.note.body))
+    }
 
     @Test fun lockedNote_neverStoredInPlaintext() = runBlocking {
         try {
@@ -169,6 +230,42 @@ class RepositoryTest {
         repo.restoreRevision("u", rev)
         assertEquals("first", db.noteDao().getNote("r")!!.body)
         assertEquals(listOf("first", "second"), db.revisionDao().forNote("r").map { it.body }.sorted())
+    }
+
+    @Test fun revisions_snapshotKeepsLayoutOnlyChanges() = runBlocking {
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", body = "نص"))
+        val attachment = repo.addAttachment("u", "r", AttachmentKind.LINK, "رابط", "", null, url = "https://example.com")
+        val text = BlockDraft("text", BlockType.TEXT, "نص")
+        val link = BlockDraft("link", BlockType.ATTACHMENT, attachmentId = attachment.id)
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", blocks = listOf(text, link)))
+        repo.snapshot("r")
+        repo.snapshot("r")
+        repo.save("u", NoteDraft(id = "r", title = "عنوان", blocks = listOf(link, text)))
+        repo.snapshot("r")
+
+        val saved = db.revisionDao().forNote("r")
+        assertEquals(2, saved.size)
+        assertTrue(saved.all { it.body == "نص" })
+        assertEquals(2, saved.map { it.blocksJson }.distinct().size)
+    }
+
+    @Test fun extractedText_isIndexedThenClearedOnLock() = runBlocking {
+        vault.setUp("u", "passphrase1".toCharArray())
+        val draft = NoteDraft(id = "image-note", title = "صورة")
+        repo.save("u", draft)
+        val attachment = repo.addAttachment("u", draft.id, AttachmentKind.IMAGE, "image.png", "image/png", byteArrayOf(1, 2, 3).inputStream())
+        repo.setExtractedText(attachment.id, "نص مصور")
+        val query = ArabicNormalizer.toFtsQuery("مصور")!!
+        assertEquals(listOf(draft.id), db.searchDao().search("u", query))
+
+        repo.save("u", draft.copy(isLocked = true))
+        repo.setExtractedText(attachment.id, "نص مصور")
+        assertTrue(db.attachmentDao().get(attachment.id)!!.extractedText.isEmpty())
+        assertTrue(db.searchDao().search("u", query).isEmpty())
+
+        repo.removeAttachment("u", attachment.id)
+        repo.setExtractedText(attachment.id, "نص مصور")
+        assertNull(db.attachmentDao().get(attachment.id))
     }
 
     @Test fun trash_and_tombstones() = runBlocking {

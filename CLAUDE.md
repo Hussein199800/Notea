@@ -1,5 +1,19 @@
 # Notea — project rules
 
+## Build and verify
+
+- Use the Gradle wrapper with JDK 17 or later and Android SDK Platform 36.1. Android Studio can install the required Build Tools. Set `ANDROID_HOME` or configure `sdk.dir` in the ignored `local.properties`.
+- Build and test the on-device configuration with `./gradlew :app:assembleDebug :app:testDebugUnitTest`. The debug APK is written to `app/build/outputs/apk/debug/`. A Firebase configuration and a release signing key are optional for debug work.
+- The Robolectric suite covers Room migrations, backup and import, editor formatting, and media logic. Run the affected test class with `--tests '*ClassName'` when iterating. Use `./gradlew :app:connectedDebugAndroidTest` with a device or emulator to verify Android intent and document-provider behavior.
+- After a UI change, render screenshots in Arabic and English and inspect mixed-direction content. Set an absolute output directory with `NOTEA_SHOTS=/path/to/screenshots ./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest' --tests '*NewScreensShotTest'`.
+
+## Code map
+
+- `ui/NoteaRoot.kt` provides navigation and the app's layout direction. Compose screens live in `ui/screens`, reusable UI in `ui/components`, and the Arabic and English labels in `ui/i18n/Strings.kt`.
+- `ui/viewmodel/EditorViewModel.kt` coordinates editor changes. `ui/editor/MarkdownEngine.kt` handles Markdown. `data/repository/Models.kt` defines the ordered block format, and `NoteRepository` persists it.
+- `data/importer` parses provider exports and shared files. `data/backup` reads and writes the Notea backup format, including attachments and block references. Room schemas and migrations live in `app/schemas` and `data/local`.
+- `data/repository/AttachmentStore.kt` stores attachment bytes. `ui/platform/Media.kt` integrates with Android viewers, and `ocr` handles on-device extraction and indexing.
+
 ## Text layout & formatting (owner's top priority — apply to every screen, dialog, widget and future feature)
 - **Text always wraps.** Never truncate user-visible text to a single line with "…" (`maxLines = 1` / `TextOverflow.Ellipsis` are not allowed for content, titles, labels, chips, list rows, dialogs or snackbars).
 - **Long text gets "عرض المزيد / عرض أقل" (Show more / Show less).** Use `ExpandableText` (`ui/components/Components.kt`): it collapses to a sensible number of lines and shows the toggle only when the text actually overflows. Long lists (e.g. checklist previews) get "عرض كل العناصر".
@@ -7,11 +21,13 @@
 - Input fields: only secrets (PIN, passwords) are single-line. Other inputs wrap (`maxLines = 3–4`), stripping newlines where a newline is meaningless.
 - Home-screen widgets cannot expand: allow 2–3 wrapped lines; tapping opens the full note.
 - Formatting quality matters a lot: Arabic-first RTL, correct bidi for mixed Arabic/Latin (avoid Latin tokens starting/ending with punctuation inside Arabic — write "بصيغة notea" not ".notea"; put spaces around Latin words next to "و"; check the rendered screenshot), consistent spacing, Rounded icon set, emerald/ivory/gold/charcoal palette, IBM Plex Sans Arabic.
-- Verify visually after UI changes: `NOTEA_SHOTS=<dir> ./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest'` renders AR/EN, light/dark.
+- Keep UI layout direction tied to the selected language and derive paragraph direction from the actual note content. Exercise Arabic paragraphs inside an English UI, mixed Arabic and Latin text, and LTR code and identifiers.
 
 ## Data safety
 - Room is the source of truth; migrations must be non-destructive (never `fallbackToDestructiveMigration`) and covered by `MigrationTest`.
 - Never store or upload plaintext of locked notes; encryption failures abort the write.
+- Keep OCR text out of attachments on locked notes. Persist OCR results through `NoteRepository.setExtractedText` so the lock check, update, and search indexing occur in the same transaction.
+- Use the Storage Access Framework for picking and exporting files. Store attachment bytes in app-private storage, and use narrow FileProvider paths for viewers that need a URI. Resolve links in imported archives against the selected inputs.
 - Any Firestore field change updates `firestore.rules`, `firestore.test.js` and `security_spec.md` together.
 
 ## Identity & build
@@ -25,4 +41,36 @@
 - Images: `ImageNormalizer` (HEIC/AVIF -> JPEG, TIFF via `TiffDecoder` -> PNG/JPEG, unsupported kept as file). OCR is on-device Tesseract (ara+eng) in `OcrWorker`; never stores OCR text for locked notes.
 - Versions: named versions (label) are never trimmed; diff via `TextDiff`.
 - Phone-to-phone transfer: raw TCP on the LAN, payload is a password-encrypted backup, the one-time code is the password.
-- AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, one note per request, input capped at 12k chars; no whole-library AI features (token cost). Notea Memory is on-device (no AI).
+- AI assistant: user's own Gemini key only (encrypted, never synced/backed up), explicit consent before sending, input capped at 12k chars. Per request: one note, one selection, one image or one recording (≤ 14 MB). The only multi-note feature is «اسأل ملاحظاتك» (owner-approved v1.4): retrieval runs on the device (`NoteMemory.Index.search`) and at most 5 unlocked notes are sent, listed by name in the consent dialog. Locked notes and encrypted attachments are never sent. Changes made by the assistant always keep a version first. Notea Memory is on-device (no AI).
+
+## Owner's work standard (v1.2 — apply to all future work)
+- Replies to the owner: Arabic only, short, direct, practical. Questions via the options tool in Arabic, recommended option first.
+- Never push to `main` without the owner's approval and a new version number. Work on the designated branch.
+- Understand the project before changing it; never remove a feature or change behaviour without reason + approval. Implement, don't just suggest; prefer the simplest solution.
+- Navigation: 4 tabs (الملاحظات، المهام والتذكيرات، المجلدات والوسوم، المزيد) — `ui/screens/Tabs.kt`. Bottom bar on phones, rail when wide; two balanced columns when width ≥ 700dp (`TabPage`).
+- Sizes: verify 320dp, 390dp, phone landscape, tablet portrait (phone layout scaled to a 560dp canvas, `ScaledLayout`/`tabletScale`), tablet landscape. Touch targets ≥ 44dp. Text size setting multiplies fontScale.
+- Colours: one fixed colour per concept (`ui/theme/Concepts.kt`); vivid g1/g2 only under icons, text colours keep ≥ 4.5:1 (tested).
+- Arabic: Latin digits (`ar-u-nu-latn`), numbers isolated with U+2068/U+2069 (`Strings.num`), Latin versions/dates/paths inside Arabic wrapped in U+2066…U+2069; Arabic count forms via `countAr`/`notesCount`; numeric inputs accept ٠-٩ ۰-۹ «٫» (`core/text/Digits`).
+- Interaction: every number opens its list and has ⓘ (`InfoButton`) when its meaning isn't obvious; «محفوظ ✓» after a setting changes (`SavedTick`); errors = cause + fix; delete → Undo snackbar (`messageWithUndo`), permanent delete → confirm; long press = multi-select; back clears search/filter, then returns to the notes tab.
+- Settings: real value, one-line explanation with the default, persisted, applied immediately, «استعادة الافتراضي».
+- Help: tour (6 steps, re-run from «المزيد»), «ما الجديد» once per version, releases page. Diagnostics log = last 50 events, masked (`core/Diagnostics.mask`).
+- Version lives in 3 places — `app/build.gradle.kts` versionName, `core/Changelog.kt` (newest first), `release-notes.md` (first line `# Notea <version>`) — enforced by `UpdateAndVersionTest`. versionCode = (major×10000+minor×100+patch)×10 + abi (universal 0, armeabi-v7a 1, arm64-v8a 2).
+- Updates: GitHub releases of Hussein199800/Notea, checked every 12h + manually; per-ABI APK, universal `Notea.apk` = fixed link `releases/latest/download/Notea.apk`; installer opened only after package/newer/signature checks (`core/update/UpdateRules`).
+- CI (`.github/workflows/android.yml`): tests on every push; signed per-ABI release only with the NOTEA_* secrets; publishes on `main` once per version; debug builds are never published; the key is never uploaded.
+- Background: heavy work goes through WorkManager; OCR runs as a single serial queue with a foreground progress notification.
+- Before any push: all unit tests + `assembleRelease`, screenshots reviewed by eye. Never claim a test that wasn't run.
+
+## v1.3 additions
+- Sub-notes: `notes.parentId` (schema v4, additive `MIGRATION_3_4`); `NoteDraft.parentId/icon = null` means "keep stored value" — change them only via `NoteRepository.setParent` (refuses cycles) / `setIcon` / `restoreMeta` (backups). The main list hides sub-notes whose parent is live; search/folders/tags show all.
+- Block types: `text`, `toggle` (first line = heading), `callout`, `checklist`, `attachment`. `BlockType.TEXTUAL` blocks are joined into `notes.body`.
+- Editor: «/» at a line start opens the insert menu; «[[» opens the note picker; `[[Title]]` links resolve by Arabic-normalized title (`core/text/NoteLinks`); backlinks never read locked notes.
+- OCR: on-device Tesseract stays automatic; «قراءة دقيقة» sends ONE image (downscaled ≤ 2000px) to Gemini with the user's key after consent, and replaces the stored OCR text. Never for locked/encrypted attachments.
+- Scanning (owner decision, v1.5): **no Google document scanner and no Google code scanner** (ML Kit / Play-services modules removed; they fail where Google downloads are blocked). «مسح مستند» always opens the chooser: phone camera document mode (then the gallery opens) / quick photo / gallery. Transfer QR = photo + on-device ZXing.
+- Samsung Notes `.sdocx` import is best-effort (UTF-16 text runs + media images) and always flags FORMATTING_LOST.
+- Colours: every tab and every action icon uses its Concept colour (trash = TRASH.g2, delete forever = TRASH.t2, archive = ARCHIVE, pin = SECURITY, favourite = TASKS, folder/sub-notes = FOLDERS, links = REMINDERS).
+
+## v1.5 additions
+- Reader (read mode in the editor): `MarkdownEngine.render` — selectable, links clickable, per-paragraph `TextDirection.Content` with manual RTL/LTR. `[[Title]]` renders as a note link (`NOTE_LINK_SCHEME`, resolved by `LocalNoteLinkHandler`). Ordered markers are LTR-isolated in styled text only (`plain()` stays clean).
+- Attachments (from Codex 016bdd4): multi-select keeps order, in-app PDF reader, image/audio previews, export via the system file picker; locked previews live in app-private cache.
+- Imports: Google Keep Takeout (checklist states + attachments) via `parseFiles`; Samsung `.sdocx` handler first in the list; restoring a duplicate never touches the original; locked content is encrypted before it is persisted (`requiresEncryption`).
+- Autosave: a closing editor discards only its own empty temporary row — never a note with sub-notes, an icon, attachments or a reminder.

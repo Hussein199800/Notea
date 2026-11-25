@@ -17,7 +17,7 @@ object SyncState {
 
 @Entity(
     tableName = "notes",
-    indices = [Index("userId"), Index("folderId"), Index(value = ["userId", "syncState"])]
+    indices = [Index("userId"), Index("folderId"), Index(value = ["userId", "syncState"]), Index("parentId")]
 )
 data class NoteEntity(
     @PrimaryKey val id: String,
@@ -47,7 +47,11 @@ data class NoteEntity(
     /** 1 = row came from the v1 schema and still needs [com.example.data.legacy.LegacyUpgrader]. */
     val legacyPending: Int = 0,
     val importSource: String = "",
-    val contentHash: String = ""
+    val contentHash: String = "",
+    /** v4: parent note (sub-notes, like pages inside a page). Null = top level. */
+    @ColumnInfo(defaultValue = "NULL") val parentId: String? = null,
+    /** v4: optional emoji shown next to the title. */
+    @ColumnInfo(defaultValue = "") val icon: String = ""
 )
 
 @Entity(
@@ -185,6 +189,12 @@ object BlockType {
     const val TEXT = "text"
     const val CHECKLIST = "checklist"
     const val ATTACHMENT = "attachment"
+    /** v1.3: collapsible block; first line = heading, rest = hidden content. */
+    const val TOGGLE = "toggle"
+    /** v1.3: highlighted note-to-self block. */
+    const val CALLOUT = "callout"
+    /** Text-bearing types (their text is part of notes.body). */
+    val TEXTUAL = setOf(TEXT, TOGGLE, CALLOUT)
 }
 
 /**

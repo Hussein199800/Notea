@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> intent.data?.let { IncomingIntent.SharedFiles(listOf(it)) }
             ACTION_OPEN_NOTE -> intent.getStringExtra(EXTRA_NOTE_ID)?.let { IncomingIntent.OpenNote(it) }
             ACTION_NEW_NOTE -> IncomingIntent.NewNote
+            ACTION_OPEN_UPDATE -> IncomingIntent.OpenUpdate
             else -> null
         }
     }
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_OPEN_NOTE = "com.example.notea.OPEN_NOTE"
         const val ACTION_NEW_NOTE = "com.example.notea.NEW_NOTE"
+        const val ACTION_OPEN_UPDATE = "com.notea.app.OPEN_UPDATE"
         const val EXTRA_NOTE_ID = "noteId"
     }
 }

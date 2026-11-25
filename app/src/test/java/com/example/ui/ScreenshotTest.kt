@@ -20,9 +20,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ChecklistItemEntity
@@ -38,10 +43,12 @@ import com.example.ui.components.SwitchRow
 import com.example.ui.i18n.LocalStrings
 import com.example.ui.i18n.Strings
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.NoteReadingText
 import com.example.ui.theme.NoteaTheme
 import com.example.ui.viewmodel.NoteCardModel
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertEquals
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -117,4 +124,20 @@ class ScreenshotTest {
     @Test fun about_ar() { rule.setContent { Frame(true, false) { com.example.ui.screens.AboutScreen {} } }; rule.waitForIdle(); save("about_ar") }
     @Test fun about_en_dark() { rule.setContent { Frame(false, true) { com.example.ui.screens.AboutScreen {} } }; rule.waitForIdle(); save("about_en_dark") }
     @Test fun auth_ar() { rule.setContent { Frame(true, false) { AuthScreen({}, {}) } }; rule.waitForIdle(); save("auth_ar") }
+
+    @Test fun reader_ar_light() = reader(arabic = true, dark = false, "reader_ar_light")
+    @Test fun reader_en_dark() = reader(arabic = false, dark = true, "reader_en_dark")
+
+    private fun reader(arabic: Boolean, dark: Boolean, name: String) {
+        val source = "## ملاحظات الإصدار\nEnglish release notes for **Notea 2.0**\n1. افتح [صفحة التحديث](https://example.com) من المتصفح."
+        val expected = "ملاحظات الإصدار\nEnglish release notes for Notea 2.0\n\u20661.\u2069 افتح صفحة التحديث من المتصفح."
+        rule.setContent { Frame(arabic, dark) { Column(Modifier.padding(20.dp)) { NoteReadingText(source) } } }
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithText(expected).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals(ResolvedTextDirection.Rtl, layout.getParagraphDirection(0))
+        assertEquals(ResolvedTextDirection.Ltr, layout.getParagraphDirection(expected.indexOf("English")))
+        assertEquals(ResolvedTextDirection.Rtl, layout.getParagraphDirection(expected.indexOf("1.")))
+        save(name)
+    }
 }

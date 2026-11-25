@@ -1,5 +1,6 @@
 package com.example.core.security
 
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -79,9 +80,15 @@ object NoteCipher {
         }
     }
 
-    fun isEncryptedFile(file: File): Boolean = file.inputStream().use { s ->
-        val b = ByteArray(FILE_MAGIC.size)
-        s.read(b) == b.size && b.contentEquals(FILE_MAGIC)
+    fun isEncryptedFile(file: File): Boolean = file.inputStream().buffered().use(::isEncryptedStream)
+
+    fun isEncryptedStream(input: BufferedInputStream): Boolean {
+        input.mark(FILE_MAGIC.size)
+        return try {
+            FILE_MAGIC.all { input.read() == (it.toInt() and 0xff) }
+        } finally {
+            input.reset()
+        }
     }
 
     private fun readFully(input: InputStream, buf: ByteArray) {

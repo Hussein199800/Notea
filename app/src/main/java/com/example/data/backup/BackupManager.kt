@@ -156,6 +156,7 @@ class BackupManager(
                 put("isArchived", n.isArchived); put("trashedAt", n.trashedAt ?: JSONObject.NULL); put("isLocked", n.isLocked)
                 put("lockPinHash", n.lockPinHash); put("lockHint", n.lockHint); put("createdAt", n.createdAt); put("updatedAt", n.updatedAt)
                 put("importSource", n.importSource)
+                put("parentId", n.parentId ?: JSONObject.NULL); put("icon", n.icon)
                 put("tags", JSONArray(d.tags.map { it.name }))
                 put("checklist", JSONArray(d.checklist.toDrafts().toJson()))
                 if (d.blocks.isNotEmpty()) put("blocks", JSONArray(d.blocks.sortedBy { it.position }
@@ -317,7 +318,7 @@ class BackupManager(
             when {
                 local == null -> c.copy(action = if (c.duplicate == DuplicateKind.EXACT) ImportAction.SKIP else c.action)
                 local.updatedAt == (c.updatedAt ?: -1L) -> c.copy(duplicate = DuplicateKind.EXACT, duplicateOfId = originalId, action = ImportAction.SKIP)
-                else -> c.copy(duplicate = DuplicateKind.SIMILAR, duplicateOfId = originalId, action = ImportAction.KEEP_BOTH)
+                else -> c.copy(duplicate = DuplicateKind.SIMILAR, duplicateOfId = originalId.takeUnless { local.isLocked }, action = ImportAction.KEEP_BOTH)
             }
         }
     }
@@ -336,7 +337,6 @@ class BackupManager(
         var lockedPlainAvailable = false
         var lockedPlainBlocks: List<com.example.data.repository.BlockDraft>? = null
         val atts = mutableListOf<ImportedAttachment>()
-        var reencryptAttachmentsFrom: ByteArray? = null
 
         if (locked && NoteCipher.isV2(body)) {
             val keyId = NoteCipher.keyIdOf(body)
@@ -347,7 +347,6 @@ class BackupManager(
                     val content = LockedPayload.decodeContent(NoteCipher.decryptText(backupMk, body))
                     body = content.body; checklist = content.checklist; lockedPlainAvailable = true
                     lockedPlainBlocks = content.blocks
-                    reencryptAttachmentsFrom = backupMk
                 }
                 else -> warnings += ImportWarning.LOCKED_CONTENT
             }
@@ -371,20 +370,23 @@ class BackupManager(
                 val path = at.optString("path")
                 val f = if (path.isNotBlank()) entries[path] else null
                 if (path.isNotBlank() && f == null) { warnings += ImportWarning.MISSING_RESOURCE; continue }
-                var file = f ?: File(ctx.tempDir, "empty_${Ids.newId()}").apply { createNewFile() }
-                var encrypted = at.optBoolean("encrypted")
-                if (encrypted && reencryptAttachmentsFrom != null && f != null) {
-                    val plain = File(ctx.tempDir, "dec_${Ids.newId()}")
-                    NoteCipher.decryptStream(reencryptAttachmentsFrom!!, f.inputStream()).use { s -> plain.outputStream().use { s.copyTo(it) } }
-                    file = plain; encrypted = false
+                var file = f ?: File("")
+                val encrypted = at.optBoolean("encrypted") && f != null
+                if (encrypted && lockedPlainAvailable && backupMk != null && currentMk != null) {
+                    file = File(ctx.tempDir, "rekey_${Ids.newId()}")
+                    f.inputStream().use { raw ->
+                        NoteCipher.decryptStream(backupMk, raw).use { plain ->
+                            file.outputStream().use { out -> NoteCipher.encryptStream(currentMk, plain, out) }
+                        }
+                    }
                 }
                 atts += ImportedAttachment(
                     kind = at.optString("kind"), name = at.optString("name"), mime = at.optString("mime"), file = file,
-                    extractedText = at.optString("extractedText"), encrypted = encrypted && storedLocked != null,
+                    extractedText = if (locked) "" else at.optString("extractedText"), encrypted = encrypted,
                     durationMs = at.optLong("durationMs"), url = at.optString("url"), linkTitle = at.optString("linkTitle"),
                     linkDescription = at.optString("linkDescription"), createdAt = at.optLong("createdAt").takeIf { it > 0 },
                     originalId = at.optString("id").takeIf { it.isNotBlank() }
-                ).let { if (path.isBlank()) it.copy(file = File("")) else it }
+                )
             }
         }
         val reminderAt = o.optJSONArray("reminders")?.let { r -> (0 until r.length()).map { r.getJSONObject(it).optLong("triggerAt") }.filter { it > System.currentTimeMillis() }.minOrNull() }
@@ -398,15 +400,14 @@ class BackupManager(
             isPinned = o.optBoolean("isPinned"), isFavorite = o.optBoolean("isFavorite"), isArchived = o.optBoolean("isArchived"),
             trashedAt = if (o.isNull("trashedAt")) null else o.optLong("trashedAt"), colorIndex = o.optInt("colorIndex"),
             attachments = atts, warnings = warnings, storedLocked = storedLocked, reminderAt = reminderAt,
+            requiresEncryption = locked, lockPinHash = o.optString("lockPinHash"), lockHint = o.optString("lockHint"),
             blocks = if (storedLocked != null) null else (o.optJSONArray("blocks")?.let { com.example.data.repository.blocksFromJson(it.toString()) }
-                ?: lockedPlainBlocks)
-        ).also {
-            if (lockedPlainAvailable) lockedPlainIds += id
-        }
+                ?: lockedPlainBlocks),
+            parentKey = o.optString("parentId").takeIf { !o.isNull("parentId") && it.isNotBlank() },
+            icon = o.optString("icon")
+        )
     }
 
-    /** Notes (by backup id) that were locked in the backup and must be re-locked when restored. */
-    val lockedPlainIds = mutableSetOf<String>()
     private val pendingRevisions = hashMapOf<String, String>()
 
     private fun decryptTo(input: InputStream, password: CharArray, target: File) {
@@ -439,13 +440,9 @@ class BackupManager(
         if (target.length() == 0L) throw BackupException(BackupException.Reason.WRONG_PASSWORD)
     }
 
-    /** After committing a restore: re-lock notes that were locked in the backup and restore their revision history. */
+    /** Restores revision history for notes successfully saved by the importer. */
     suspend fun finishRestore(uid: String, createdIds: Map<String, String>) {
         for ((backupId, newId) in createdIds) {
-            if (backupId in lockedPlainIds) {
-                val d = db.noteDao().getNoteWithDetails(newId) ?: continue
-                repository.toDraft(uid, d)?.let { draft -> runCatching { repository.save(uid, draft.copy(isLocked = true, updatedAt = d.note.updatedAt)) } }
-            }
             val revs = pendingRevisions[backupId] ?: continue
             val arr = JSONArray(revs)
             for (i in 0 until arr.length()) {
@@ -455,7 +452,7 @@ class BackupManager(
                     r.optString("label"), r.optString("blocks"))
             }
         }
-        lockedPlainIds.clear(); pendingRevisions.clear()
+        pendingRevisions.clear()
         commitTemplates(uid)
     }
 

@@ -15,6 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.QuestionAnswer
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckBox
@@ -95,6 +100,10 @@ fun AssistantSheet(vm: EditorViewModel, onDismiss: () -> Unit) {
     val ui by vm.assistant.collectAsState()
     var pending by remember { mutableStateOf<NoteAssistant.Action?>(null) }
     fun start(a: NoteAssistant.Action) { if (vm.needsConsent()) pending = a else vm.runAssistant(a, false) }
+    // Generic consent for the newer tools: body + what to run with the "remember" choice.
+    var consent by remember { mutableStateOf<Pair<String, (Boolean) -> Unit>?>(null) }
+    fun gated(body: String, run: (Boolean) -> Unit) { if (vm.needsConsent()) consent = body to run else run(false) }
+    var showTools by remember { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = { vm.dismissAssistant(); onDismiss() }) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).heightIn(max = 640.dp).verticalScroll(rememberScrollState()),
@@ -105,10 +114,71 @@ fun AssistantSheet(vm: EditorViewModel, onDismiss: () -> Unit) {
                 Text(s.assistant, style = MaterialTheme.typography.titleLarge)
             }
             when (val st = ui) {
-                AssistantUi.Idle -> {
-                    ActionRow(Icons.AutoMirrored.Rounded.Notes, s.actSummary, s.actSummaryDesc) { start(NoteAssistant.Action.SUMMARY) }
-                    ActionRow(Icons.Rounded.TaskAlt, s.actTasks, s.actTasksDesc) { start(NoteAssistant.Action.TASKS) }
-                    ActionRow(Icons.Rounded.Route, s.actPlan, s.actPlanDesc) { start(NoteAssistant.Action.PLAN) }
+                AssistantUi.Idle -> if (showTools) {
+                    val target = vm.rewriteTarget()
+                    if (target == null) Text(s.writeSomethingFirst, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else {
+                        Text(if (target.isSelection) s.toolsOnSelection else s.toolsOnBlock, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        ExpandableText(target.original, collapsedLines = 3, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        listOf(NoteAssistant.Rewrite.IMPROVE to s.rwImprove, NoteAssistant.Rewrite.FIX to s.rwFix, NoteAssistant.Rewrite.SHORTEN to s.rwShorten,
+                            NoteAssistant.Rewrite.EXPAND to s.rwExpand, NoteAssistant.Rewrite.TRANSLATE to s.rwTranslate, NoteAssistant.Rewrite.FORMAL to s.rwFormal,
+                            NoteAssistant.Rewrite.LEGAL to s.rwLegal).forEach { (m, label) ->
+                            ActionRow(Icons.Rounded.EditNote, label, null) { gated(s.consentText(target.original.length)) { r -> vm.rewrite(m, target, r) } }
+                        }
+                    }
+                    TextButton(onClick = { showTools = false }) { Text(s.back) }
+                } else {
+                    ActionRow(Icons.Rounded.QuestionAnswer, s.actAsk, s.actAskDesc) { vm.openChat() }
+                    ActionRow(Icons.Rounded.EditNote, s.actTools, s.actToolsDesc) { showTools = true }
+                    ActionRow(Icons.Rounded.Sell, s.actSuggest, s.actSuggestDesc) { gated(s.consentBody(vm.assistantPayload().first.length, vm.assistantPayload().second)) { r -> vm.suggest(r) } }
+                    if (vm.assistantAvailable) {
+                        ActionRow(Icons.AutoMirrored.Rounded.Notes, s.actSummary, s.actSummaryDesc) { start(NoteAssistant.Action.SUMMARY) }
+                        ActionRow(Icons.Rounded.TaskAlt, s.actTasks, s.actTasksDesc) { start(NoteAssistant.Action.TASKS) }
+                        ActionRow(Icons.Rounded.Route, s.actPlan, s.actPlanDesc) { start(NoteAssistant.Action.PLAN) }
+                    } else Text(s.longNoteTools, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                is AssistantUi.Chat -> {
+                    st.turns.forEach { t ->
+                        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), modifier = Modifier.fillMaxWidth()) {
+                            Text(t.question, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        SelectionContainerText(t.answer)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { clipboard.setText(AnnotatedString(t.answer)) }) { Text(s.copy) }
+                            TextButton(onClick = { vm.insertAnswer(t.question, t.answer); onDismiss() }) { Text(s.insertIntoNote) }
+                        }
+                    }
+                    if (st.turns.isEmpty()) Text(s.askHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    st.error?.let { ExpandableText(s.aiError(it), collapsedLines = 3, color = MaterialTheme.colorScheme.error) }
+                    var q by remember { mutableStateOf("") }
+                    if (st.loading) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text(s.thinking) }
+                    else Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.OutlinedTextField(q, { q = it.replace("\n", " ") }, label = { Text(s.yourQuestion) }, maxLines = 4, modifier = Modifier.weight(1f))
+                        IconButton(enabled = q.isNotBlank(), onClick = {
+                            val question = q
+                            gated(s.consentBody(vm.assistantPayload().first.length, vm.assistantPayload().second)) { r -> vm.ask(question, r); q = "" }
+                        }, modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Rounded.Send, s.send, tint = com.example.ui.theme.Concept.ASSISTANT.g2) }
+                    }
+                }
+                is AssistantUi.RewriteResult -> {
+                    Text(s.rewriteResult, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    SelectionContainerText(st.result)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { vm.applyRewrite(st, replace = true); onDismiss() }) { Text(if (st.target.isSelection) s.replaceSelection else s.replaceBlock) }
+                        TextButton(onClick = { vm.applyRewrite(st, replace = false); onDismiss() }) { Text(s.insertBelow) }
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(st.result)) }) { Text(s.copy) }
+                    }
+                    Text(s.versionKept, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                is AssistantUi.SuggestResult -> {
+                    var useTitle by remember(st) { mutableStateOf(st.value.title.isNotBlank()) }
+                    val tagSel = remember(st) { mutableStateListOf(*st.value.tags.toTypedArray()) }
+                    var useFolder by remember(st) { mutableStateOf(st.value.folder != null) }
+                    if (st.value.title.isNotBlank()) CheckRow(useTitle, s.suggestedTitle + ": " + st.value.title) { useTitle = it }
+                    st.value.tags.forEach { t -> CheckRow(t in tagSel, "#$t") { on -> if (on) tagSel.add(t) else tagSel.remove(t) } }
+                    st.value.folder?.let { f -> CheckRow(useFolder, s.suggestedFolder + ": " + f) { useFolder = it } }
+                    if (st.value.title.isBlank() && st.value.tags.isEmpty() && st.value.folder == null) Text(s.nothingFound)
+                    Button(onClick = { vm.applySuggestion(if (useTitle) st.value.title else null, tagSel.toList(), if (useFolder) st.value.folder else null); onDismiss() }) { Text(s.apply) }
                 }
                 AssistantUi.Loading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 24.dp)) {
                     CircularProgressIndicator(Modifier.size(28.dp)); Spacer(Modifier.width(16.dp)); Text(s.thinking)
@@ -166,6 +236,7 @@ fun AssistantSheet(vm: EditorViewModel, onDismiss: () -> Unit) {
             }
         }
     }
+    consent?.let { (body, run) -> ConsentDialog(body, onSend = { r -> run(r) }) { consent = null } }
     pending?.let { a ->
         val (text, truncated) = vm.assistantPayload()
         ConsentDialog(s.consentBody(text.length, truncated), onSend = { remember -> vm.runAssistant(a, remember) }) { pending = null }
@@ -173,14 +244,26 @@ fun AssistantSheet(vm: EditorViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ActionRow(icon: ImageVector, title: String, desc: String, onClick: () -> Unit) {
+private fun CheckRow(checked: Boolean, label: String, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onChange(!checked) }) {
+        Checkbox(checked, onChange); Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun SelectionContainerText(text: String) {
+    androidx.compose.foundation.text.selection.SelectionContainer { ExpandableText(text, collapsedLines = 14, style = MaterialTheme.typography.bodyLarge) }
+}
+
+@Composable
+private fun ActionRow(icon: ImageVector, title: String, desc: String?, onClick: () -> Unit) {
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (desc != null) Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

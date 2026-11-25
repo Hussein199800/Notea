@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
 import androidx.compose.material.icons.rounded.Close
@@ -51,6 +54,11 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.AddBox
+import androidx.compose.material.icons.rounded.VerticalAlignTop
+import androidx.compose.material.icons.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatItalic
@@ -75,9 +83,11 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Title
 import androidx.compose.material.icons.rounded.ViewQuilt
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -110,6 +120,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,11 +129,17 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -132,7 +149,6 @@ import coil.compose.AsyncImage
 import com.example.core.security.PinHasher
 import com.example.core.security.VaultState
 import com.example.data.local.AttachmentEntity
-import com.example.data.local.AttachmentKind
 import com.example.data.local.RevisionReason
 import com.example.data.repository.DecryptResult
 import com.example.ui.components.ColorPicker
@@ -157,20 +173,34 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 
+private enum class ReadingDirection(val direction: TextDirection) {
+    AUTOMATIC(TextDirection.Content), RTL(TextDirection.Rtl), LTR(TextDirection.Ltr)
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<com.example.data.local.FolderEntity>, startScan: Boolean = false,
                  onOpenNote: (String) -> Unit = {}, onClose: () -> Unit) {
     val s = LocalStrings.current
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val st by vm.state.collectAsState()
     val vaultState by session.vaultState.collectAsState()
     val scope = rememberCoroutineScope()
 
     var menu by remember { mutableStateOf(false) }
+    var reading by rememberSaveable(vm.noteId) { mutableStateOf(false) }
+    var directionMenu by remember { mutableStateOf(false) }
+    var readingDirection by rememberSaveable(vm.noteId) { mutableStateOf(ReadingDirection.AUTOMATIC) }
     var compareTarget by remember { mutableStateOf<String?>(null) }
     var sheet by remember { mutableStateOf<String?>(null) } // color, folder, tags, reminder, history
     var linkDialog by remember { mutableStateOf(false) }
+    var iconDialog by remember { mutableStateOf(false) }
+    var parentPicker by remember { mutableStateOf(false) }
+    var linkPicker by remember { mutableStateOf(false) }
+    var manualSlash by remember { mutableStateOf(false) }
+    val graph by vm.graph.collectAsState()
+    val trigger by vm.trigger.collectAsState()
     var templateDialog by remember { mutableStateOf(false) }
     var pinDialog by remember { mutableStateOf(false) }
     var vaultDialog by remember { mutableStateOf(false) }
@@ -182,7 +212,8 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     var recordSeconds by remember { mutableStateOf(0) }
 
     fun close() { recorder.cancel(); AudioPlayer.stop(); vm.flush(); onClose() }
-    BackHandler { close() }
+    fun back() { if (reading) reading = false else close() }
+    BackHandler { back() }
 
     val lifecycle = LocalLifecycleOwner.current
     DisposableEffect(lifecycle) {
@@ -195,6 +226,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
             when (e) {
                 EditorEvent.EncryptionFailed -> session.message(s.encryptionFailedNotSaved)
                 EditorEvent.VaultRequired -> vaultDialog = true
+                is EditorEvent.AttachmentFailed -> session.message(s.attachmentAddFailed(e.count))
                 is EditorEvent.Message -> session.message(e.text)
             }
         }
@@ -202,47 +234,46 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
     LaunchedEffect(recording) { while (recording) { delay(1000); recordSeconds++ } }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
-        uris.forEach { vm.addAttachmentFromUri(it, AttachmentKind.IMAGE) }
+        vm.addAttachmentsFromUris(uris, imageHint = true)
     }
-    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> uris.forEach { vm.addAttachmentFromUri(it) } }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.addAttachmentsFromUris(uris) }
     // Document scanner (edge detection + perspective fix, on device via Google Play services);
     // falls back to the system camera on devices without Play services.
-    val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    var cameraName by rememberSaveable { mutableStateOf<String?>(null) }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (ok) cameraUri.value?.let { vm.addAttachmentFromUri(it, AttachmentKind.IMAGE) }
-    }
-    var scanFallback by remember { mutableStateOf(false) }
-    val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        val pages = if (r.resultCode == android.app.Activity.RESULT_OK)
-            com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages.orEmpty() else emptyList()
-        if (pages.isEmpty()) scanFallback = true // cancelled, or Google's "Something went wrong" screen
-        pages.forEach { vm.addAttachmentFromUri(it.imageUri, AttachmentKind.IMAGE) }
-    }
-    fun launchCamera() {
-        val f = java.io.File(context.cacheDir, "camera/scan_${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", f)
-        cameraUri.value = uri
-        runCatching { takePicture.launch(uri) }.onFailure { session.message(s.noAppToOpen) }
-    }
-    fun startScan() {
-        val activity = context.findActivity()
-        if (activity == null) { launchCamera(); return }
-        val options = com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
-            .setGalleryImportAllowed(true).setPageLimit(20)
-            .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-            .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL).build()
-        val client = runCatching { com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options) }.getOrNull()
-        if (client == null) { launchCamera(); return }
-        scope.launch {
-            // Only open Google's scanner when its module is really installed; otherwise go straight to the camera.
-            if (!com.example.ui.platform.GmsModules.ready(context, client)) {
-                session.message(s.scannerUsingCamera); launchCamera(); return@launch
+        val savedName = cameraName
+        cameraName = null
+        if (savedName != null) {
+            val file = java.io.File(context.cacheDir, "camera/$savedName")
+            if (ok) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", file)
+                vm.addAttachmentsFromUris(listOf(uri), imageHint = true).invokeOnCompletion { file.delete() }
+            } else {
+                file.delete()
             }
-            client.getStartScanIntent(activity)
-                .addOnSuccessListener { scanLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
-                .addOnFailureListener { launchCamera() }
         }
     }
+    var scanFallback by remember { mutableStateOf(false) }
+    // The phone's own camera app (Samsung/Xiaomi/Huawei have a «Document» mode there); when the user
+    // comes back, the gallery picker opens on the newest photos so the scan can be added in one tap.
+    val phoneCamera = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        runCatching { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    }
+    fun launchCamera() {
+        val name = "scan_${System.currentTimeMillis()}.jpg"
+        val file = java.io.File(context.cacheDir, "camera/$name").apply { parentFile?.mkdirs() }
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", file)
+            cameraName = name
+            takePicture.launch(uri)
+        }.onFailure {
+            cameraName = null
+            file.delete()
+            session.message(s.noAppToOpen)
+        }
+    }
+    /** «مسح مستند»: always the chooser — phone camera (document mode), quick photo or gallery. No Google scanner. */
+    fun startScan() { scanFallback = true }
     LaunchedEffect(startScan, st.loading) { if (startScan && !st.loading) startScan() }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { recording = recorder.start(); recordSeconds = 0 } else session.message(s.micPermission)
@@ -264,16 +295,40 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
         } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    val readOnly = st.trashedAt != null
+    val inTrash = st.trashedAt != null
+    val readOnly = inTrash || reading
     val bg = noteColor(st.colorIndex)
 
     Surface(Modifier.fillMaxSize(), color = bg) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+        val insets = if (readOnly) Modifier.navigationBarsPadding() else Modifier
+        Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().then(insets)) {
             // ------------------------------------------------ top bar
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { close() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, s.back) }
+                IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, s.back) }
                 Spacer(Modifier.weight(1f))
-                if (!readOnly && st.blocked == null) {
+                if (readOnly && !st.loading && st.blocked == null) {
+                    Box {
+                        IconButton(onClick = { directionMenu = true }) { Icon(Icons.Rounded.SwapHoriz, s.readingDirection) }
+                        DropdownMenu(directionMenu, { directionMenu = false }) {
+                            listOf(
+                                ReadingDirection.AUTOMATIC to s.directionAutomatic,
+                                ReadingDirection.RTL to s.directionRtl,
+                                ReadingDirection.LTR to s.directionLtr
+                            ).forEach { (direction, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    modifier = Modifier.semantics { selected = readingDirection == direction },
+                                    trailingIcon = { if (readingDirection == direction) Icon(Icons.Rounded.Check, null) },
+                                    onClick = { readingDirection = direction; directionMenu = false }
+                                )
+                            }
+                        }
+                    }
+                }
+                if (reading && !inTrash && st.blocked == null) {
+                    IconButton(onClick = { reading = false }) { Icon(Icons.Rounded.Edit, s.editNote) }
+                }
+                if (!readOnly && !st.loading && st.blocked == null) {
                     IconButton(onClick = vm::undo, enabled = st.canUndo) { Icon(Icons.AutoMirrored.Rounded.Undo, s.undo) }
                     IconButton(onClick = vm::redo, enabled = st.canRedo) { Icon(Icons.AutoMirrored.Rounded.Redo, s.redo) }
                     IconButton(onClick = vm::togglePin) { Icon(if (st.isPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin, if (st.isPinned) s.unpin else s.pin,
@@ -283,6 +338,12 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, s.more) }
                         DropdownMenu(menu, { menu = false }) {
+                            if (!recording) MenuItem(Icons.Rounded.Visibility, s.readingMode) {
+                                menu = false
+                                focusManager.clearFocus()
+                                vm.flush()
+                                reading = true
+                            }
                             MenuItem(Icons.Rounded.Palette, s.color) { sheet = "color"; menu = false }
                             MenuItem(Icons.Rounded.Folder, s.moveToFolder) { sheet = "folder"; menu = false }
                             MenuItem(Icons.Rounded.Tag, s.addTags) { sheet = "tags"; menu = false }
@@ -292,9 +353,17 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 if (st.isLocked) confirmUnlock = true
                                 else if (vaultState != VaultState.READY) vaultDialog = true else pinDialog = true
                             }
-                            if (vm.assistantAvailable) MenuItem(Icons.Rounded.AutoAwesome, s.assistant) { sheet = "assistant"; menu = false }
-                            MenuItem(Icons.Rounded.History, s.history) { sheet = "history"; menu = false }
-                            MenuItem(Icons.Rounded.ViewQuilt, s.saveAsTemplate) { templateDialog = true; menu = false }
+                            if (vm.assistantReady) MenuItem(Icons.Rounded.AutoAwesome, s.assistant, com.example.ui.theme.Concept.ASSISTANT) { sheet = "assistant"; menu = false }
+                            else if (!vm.assistantConfigured && !st.isLocked) MenuItem(Icons.Rounded.AutoAwesome, s.setUpAssistant, com.example.ui.theme.Concept.ASSISTANT) {
+                                menu = false; vm.flush(); session.navigate(com.example.ui.viewmodel.Screen.AssistantSettings)
+                            }
+                            MenuItem(Icons.Rounded.EmojiEmotions, s.noteIcon, com.example.ui.theme.Concept.SECURITY) { iconDialog = true; menu = false }
+                            MenuItem(Icons.Rounded.DriveFileMove, s.moveUnderNote, com.example.ui.theme.Concept.FOLDERS) { parentPicker = true; menu = false }
+                            if (graph.parent != null) MenuItem(Icons.Rounded.VerticalAlignTop, s.moveToTop, com.example.ui.theme.Concept.FOLDERS) {
+                                menu = false; vm.moveUnder(null) { session.message(s.movedUnder) }
+                            }
+                            MenuItem(Icons.Rounded.History, s.history, com.example.ui.theme.Concept.REMINDERS) { sheet = "history"; menu = false }
+                            if (!st.isLocked) MenuItem(Icons.Rounded.ViewQuilt, s.saveAsTemplate) { templateDialog = true; menu = false }
                             if (!st.isLocked) MenuItem(Icons.Rounded.Share, s.share) {
                                 menu = false
                                 val text = buildString {
@@ -303,8 +372,8 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                                 }
                                 FileOpener.shareText(context, st.title, (st.title + "\n\n" + text).trim())
                             }
-                            MenuItem(Icons.Rounded.Archive, if (st.isArchived) s.unarchive else s.archiveAction) { menu = false; vm.toggleArchive { onClose() } }
-                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash) { menu = false; vm.moveToTrash { session.message(s.movedToTrash); onClose() } }
+                            MenuItem(Icons.Rounded.Archive, if (st.isArchived) s.unarchive else s.archiveAction, com.example.ui.theme.Concept.ARCHIVE) { menu = false; vm.toggleArchive { onClose() } }
+                            MenuItem(Icons.Rounded.DeleteOutline, s.moveToTrash, com.example.ui.theme.Concept.TRASH) { menu = false; vm.moveToTrash { val id = vm.noteId; session.messageWithUndo(s.movedToTrash) { session.restoreFromTrash(id) }; onClose() } }
                         }
                     }
                 }
@@ -323,10 +392,10 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                     }
                 }
                 else -> Column(
-                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
-                        .widthIn(max = 820.dp)
+                    Modifier.weight(1f).widthIn(max = 820.dp).fillMaxWidth().align(Alignment.CenterHorizontally)
+                        .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
                 ) {
-                    if (readOnly) {
+                    if (inTrash) {
                         Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(s.readOnlyTrash, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -334,22 +403,45 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                             }
                         }
                     }
-                    BasicTextField(
-                        value = st.title, onValueChange = vm::setTitle, readOnly = readOnly,
-                        textStyle = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                    graph.parent?.let { p -> ParentCrumb(p) { id -> vm.flush(); onOpenNote(id) } }
+                    if (graph.icon.isNotBlank()) Text(graph.icon, style = MaterialTheme.typography.displaySmall,
+                        modifier = Modifier.padding(top = 8.dp).clickable(enabled = !readOnly) { iconDialog = true })
+                    else if (!readOnly) TextButton(onClick = { iconDialog = true }, modifier = Modifier.heightIn(min = 44.dp)) {
+                        Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(s.addIcon, style = MaterialTheme.typography.labelLarge)
+                    }
+                    val titleStyle = MaterialTheme.typography.headlineSmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Start,
+                        textDirection = if (readOnly) readingDirection.direction else TextDirection.Content
+                    )
+                    val titleModifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    if (readOnly) SelectionContainer {
+                        Text(st.title.ifBlank { s.untitled }, titleModifier.semantics { heading() }, style = titleStyle)
+                    } else BasicTextField(
+                        value = st.title, onValueChange = vm::setTitle,
+                        textStyle = titleStyle,
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                        modifier = titleModifier,
                         decorationBox = { inner ->
-                            if (st.title.isEmpty()) Text(s.titleHint, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            if (st.title.isEmpty()) Text(s.titleHint, style = titleStyle, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                             inner()
                         }
                     )
                     MetaLine(st, folders)
-                    BlocksContent(vm, st, readOnly)
+                    androidx.compose.runtime.CompositionLocalProvider(LocalNoteLinkHandler provides { title ->
+                        val key = com.example.core.text.NoteLinks.key(title)
+                        val target = graph.all.firstOrNull { com.example.core.text.NoteLinks.key(it.title) == key }
+                        if (target != null) { vm.flush(); onOpenNote(target.id) } else session.message(s.noteNotFound(title))
+                    }) {
+                        BlocksContent(vm, st, readOnly, readingDirection.direction)
+                    }
+                    if (!st.isLocked) NoteGraphSection(graph, readOnly, onOpen = { id -> vm.flush(); onOpenNote(id) },
+                        onNewChild = { vm.createChild { id -> onOpenNote(id) } },
+                        onCreateLinked = { t -> vm.createLinked(t) })
                     LaunchedEffect(st.loading, st.persisted) { if (!st.loading && st.persisted) vm.refreshRelated() }
                     RelatedNotesSection(vm, onOpen = { id -> vm.flush(); onOpenNote(id) },
-                        onCompare = if (com.example.ui.screens.assistantOn(vm)) { id -> if (vm.needsConsent()) compareTarget = id else { vm.compareWith(id, false); sheet = "assistant" } } else null)
+                        onCompare = if (!readOnly && com.example.ui.screens.assistantOn(vm)) { id -> if (vm.needsConsent()) compareTarget = id else { vm.compareWith(id, false); sheet = "assistant" } } else null)
                     if (recording) {
                         Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -368,6 +460,42 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                 }
             }
 
+            // ------------------------------------------------ «/» menu and note pickers (above the keyboard)
+            val tr = trigger
+            val trBlock = tr?.let { t -> st.blocks.firstOrNull { it.id == t.blockId } as? com.example.ui.viewmodel.EditorBlock.Text }
+            fun triggerQuery(skip: Int): String = trBlock?.value?.let { v ->
+                val from = (tr!!.at + skip).coerceAtMost(v.text.length)
+                v.text.substring(from, v.selection.start.coerceIn(from, v.text.length))
+            }.orEmpty()
+            if (!readOnly && (manualSlash || tr?.kind == com.example.ui.viewmodel.EditorViewModel.Trigger.Kind.SLASH)) {
+                SlashPanel(if (manualSlash) "" else triggerQuery(1), onPick = { item ->
+                    manualSlash = false
+                    when (item.key) {
+                        "h" -> vm.slashLinePrefix("## ")
+                        "ul" -> vm.slashLinePrefix("- ")
+                        "ol" -> vm.slashLinePrefix("1. ")
+                        "quote" -> vm.slashLinePrefix("> ")
+                        "todo" -> vm.slashChecklist()
+                        "toggle" -> vm.insertSpecial(com.example.data.local.BlockType.TOGGLE, fromSlash = true)
+                        "callout" -> vm.insertSpecial(com.example.data.local.BlockType.CALLOUT, fromSlash = true)
+                        "sub" -> { vm.clearTrigger(); vm.createChild { id -> onOpenNote(id) } }
+                        "link" -> { vm.clearTrigger(); linkPicker = true }
+                        "image" -> { vm.clearTrigger(); pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        "scan" -> { vm.clearTrigger(); startScan() }
+                        "file" -> { vm.clearTrigger(); pickFile.launch(arrayOf("*/*")) }
+                    }
+                }, onDismiss = { manualSlash = false; vm.dismissTrigger() })
+            } else if (!readOnly && (linkPicker || tr?.kind == com.example.ui.viewmodel.EditorViewModel.Trigger.Kind.LINK)) {
+                NotePickerPanel(s.linkToNote, graph.all, if (linkPicker) "" else triggerQuery(2),
+                    onPick = { n -> linkPicker = false; vm.insertNoteLink(n.title.ifBlank { s.untitled }) },
+                    onCreate = { t -> linkPicker = false; vm.insertNoteLink(t); vm.createLinked(t) },
+                    onDismiss = { linkPicker = false; vm.dismissTrigger() })
+            } else if (parentPicker) {
+                NotePickerPanel(s.pickParent, graph.all.filter { it.id !in graph.children.map { c -> c.id } }, "",
+                    onPick = { n -> parentPicker = false; vm.moveUnder(n.id) { ok -> session.message(if (ok) s.movedUnder else s.cantMoveUnder) } },
+                    onCreate = null, onDismiss = { parentPicker = false })
+            }
+
             // ------------------------------------------------ formatting toolbar
             if (!readOnly && st.blocked == null && !st.loading) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -376,6 +504,7 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                         .horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Tool(Icons.Rounded.AddBox, s.insertBlock) { manualSlash = !manualSlash }
                     Tool(Icons.Rounded.CheckBox, s.checklist) { vm.insertChecklist() }
                     Tool(Icons.Rounded.FormatBold, s.bold) { vm.applyFormat { MarkdownEngine.toggleInline(it, "**") } }
                     Tool(Icons.Rounded.FormatItalic, s.italic) { vm.applyFormat { MarkdownEngine.toggleInline(it, "*") } }
@@ -450,16 +579,16 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                 vm.addLinkCard(u, p?.title.orEmpty(), p?.description.orEmpty())
             }
         })
-    if (scanFallback) AlertDialog(
-        onDismissRequest = { scanFallback = false },
-        title = { Text(s.scanIncompleteTitle) },
-        text = { com.example.ui.components.ExpandableText(s.scanIncompleteBody, collapsedLines = 6) },
-        confirmButton = { TextButton(onClick = { scanFallback = false; launchCamera() }) { Text(s.useCamera) } },
-        dismissButton = { TextButton(onClick = { scanFallback = false }) { Text(s.cancel) } }
+    if (scanFallback) ScanChooser(
+        onPhoneCamera = { scanFallback = false; runCatching { phoneCamera.launch(android.content.Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)) }.onFailure { launchCamera() } },
+        onQuickCamera = { scanFallback = false; launchCamera() },
+        onGallery = { scanFallback = false; pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onDismiss = { scanFallback = false }
     )
     compareTarget?.let { id ->
         ConsentDialog(s.consentCompareBody, onSend = { remember -> vm.compareWith(id, remember); sheet = "assistant" }) { compareTarget = null }
     }
+    if (iconDialog) IconPickerDialog(graph.icon, onPick = { vm.setIcon(it) }) { iconDialog = false }
     if (templateDialog) TextInputDialog(s.saveAsTemplate, s.templateName, st.title, s.save, { vm.saveAsTemplate(it); session.message(s.templateSaved) }) { templateDialog = false }
     if (pinDialog) SetPinDialog(s.lockNote, withHint = true, onSet = { pin, hint ->
         scope.launch { val h = withContext(Dispatchers.Default) { PinHasher.hash(pin) }; vm.lock(h, hint); session.markOpened(vm.noteId) }
@@ -477,8 +606,9 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
 }
 
 @Composable
-private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) =
-    DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(icon, null) }, onClick = onClick)
+private fun MenuItem(icon: ImageVector, label: String, concept: com.example.ui.theme.Concept? = null, onClick: () -> Unit) =
+    DropdownMenuItem(text = { Text(label, color = if (concept == com.example.ui.theme.Concept.TRASH) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified) },
+        leadingIcon = { Icon(icon, null, tint = concept?.g2 ?: MaterialTheme.colorScheme.onSurfaceVariant) }, onClick = onClick)
 
 @Composable
 private fun Tool(icon: ImageVector, label: String, onClick: () -> Unit) {
@@ -545,3 +675,35 @@ private fun android.content.Context.findActivity(): android.app.Activity? {
 
 /** Compare is offered only when the assistant is set up and the note is not locked. */
 fun assistantOn(vm: EditorViewModel) = vm.assistantAvailable
+
+/** Scanning options: the phone's own document mode first (Samsung/Xiaomi/Huawei), then a quick photo or the gallery. */
+@Composable
+private fun ScanChooser(onPhoneCamera: () -> Unit, onQuickCamera: () -> Unit, onGallery: () -> Unit, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.DocumentScanner, null) },
+        title = { Text(s.scanChooseTitle) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                com.example.ui.components.ExpandableText(s.scanChooseBody, collapsedLines = 4, style = MaterialTheme.typography.bodyMedium)
+                ScanOption(s.scanOptPhoneCamera, s.scanOptPhoneCameraDesc, onPhoneCamera)
+                ScanOption(s.scanOptQuick, s.scanOptQuickDesc, onQuickCamera)
+                ScanOption(s.scanOptGallery, s.scanOptGalleryDesc, onGallery)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
+    )
+}
+
+@Composable
+private fun ScanOption(title: String, desc: String, onClick: () -> Unit) {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}

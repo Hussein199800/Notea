@@ -45,20 +45,33 @@ object TitleHeuristics {
 /** Pulls `- [ ]` / `- [x]` / `☐` / `☑` lines out of a body into checklist items. */
 object ChecklistExtractor {
     private val pattern = Regex("^\\s*(?:[-*+]\\s*\\[( |x|X)]|(☐|☑|✓|✔|□|■))\\s+(.+)$")
+    private val fencePattern = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
 
     fun extract(body: String): Pair<String, List<ChecklistDraft>> {
         val items = mutableListOf<ChecklistDraft>()
-        val kept = StringBuilder()
+        val kept = mutableListOf<String>()
+        var fence: String? = null
         for (line in body.lines()) {
+            val marker = fencePattern.matchEntire(line)
+            if (fence != null || marker != null) {
+                val current = fence
+                if (marker != null) {
+                    val token = marker.groupValues[1]
+                    if (current == null) fence = token
+                    else if (token.first() == current.first() && token.length >= current.length && marker.groupValues[2].isBlank()) fence = null
+                }
+                kept += line
+                continue
+            }
             val m = pattern.find(line)
             if (m != null) {
                 val checked = m.groupValues[1].equals("x", true) || m.groupValues[2] in setOf("☑", "✓", "✔", "■")
                 items += ChecklistDraft(text = m.groupValues[3].trim(), checked = checked)
             } else {
-                kept.append(line).append('\n')
+                kept += line
             }
         }
-        return kept.toString().trimEnd() to items
+        return kept.joinToString("\n").trimEnd('\n', '\r') to items
     }
 }
 

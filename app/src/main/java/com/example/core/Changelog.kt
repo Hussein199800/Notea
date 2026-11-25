@@ -1,0 +1,123 @@
+package com.example.core
+
+/**
+ * Release notes shown in «ما الجديد» and the releases page. The newest entry must match
+ * versionName in app/build.gradle.kts and the top of release-notes.md (VersionMatchTest).
+ */
+object Changelog {
+    data class Release(val version: String, val date: String, val ar: List<String>, val en: List<String>)
+
+    val releases = listOf(
+        Release(
+            "1.5", "2026-11-25",
+            ar = listOf(
+                "وضع قراءة: نص قابل للتحديد، روابط تُفتح بلمسة، اتجاه تلقائي لكل فقرة مع خيار يمين لليسار أو يسار لليمين",
+                "روابط [[ ]] تفتح الملاحظة المرتبطة مباشرة من وضع القراءة",
+                "المرفقات: ترتيب الاختيار محفوظ، قارئ PDF داخل التطبيق بتنقّل بين الصفحات وتكبير، معاينة الصور والصوت، وحفظ نسخة عبر منتقي الملفات",
+                "استيراد Google Keep من Takeout مع حالة عناصر القوائم والمرفقات، ومسار Samsung Notes كما هو",
+                "الاستيراد والاستعادة لا يغيّران الملاحظة الأصلية عند التكرار، والمحتوى المقفل يُشفَّر قبل حفظه",
+                "حفظ تلقائي أدق: التعديل أثناء الحفظ يُسجَّل، وتفريغ ملاحظة موجودة لا يحذفها، وتغيير ترتيب الكتل وحده يُنشئ إصداراً",
+                "إزالة ماسح Google بالكامل: «مسح مستند» يفتح كاميرا الهاتف بوضع المستندات أو التقاطاً سريعاً أو المعرض، ورمز QR يُقرأ من صورة على الهاتف"
+            ),
+            en = listOf(
+                "Reading mode: selectable text, tappable links, automatic per-paragraph direction with manual RTL/LTR",
+                "[[ ]] links open the linked note right from reading mode",
+                "Attachments: selection order kept, in-app PDF reader with page navigation and zoom, image and audio previews, save a copy via the file picker",
+                "Google Keep import from Takeout with checklist states and attachments; the Samsung Notes path is unchanged",
+                "Importing or restoring a duplicate leaves the original note intact; locked content is encrypted before it is stored",
+                "More precise autosave: edits during a save are kept, emptying an existing note doesn't delete it, and reordering blocks alone creates a version",
+                "Google's scanner removed entirely: «Scan document» opens the phone camera's document mode, a quick photo or the gallery; transfer QR codes are read from a photo on the device"
+            )
+        ),
+        Release(
+            "1.4.1", "2026-11-09",
+            ar = listOf(
+                "تسجيل الدخول بحساب Google ومزامنة ملاحظاتك تلقائياً بين أجهزتك",
+                "ملاحظاتك الحالية على الهاتف تنتقل إلى حسابك عند أول تسجيل دخول دون فقد شيء",
+                "الملاحظات المقفلة تُرفع مشفّرة فقط، ويبقى الاستخدام بدون حساب متاحاً كما هو"
+            ),
+            en = listOf(
+                "Sign in with Google and sync your notes automatically across devices",
+                "Notes already on this phone move into your account on first sign-in, nothing is lost",
+                "Locked notes are uploaded encrypted only; using the app without an account stays available"
+            )
+        ),
+        Release(
+            "1.4.0", "2026-11-09",
+            ar = listOf(
+                "«اسأل عن هذه الملاحظة»: محادثة حرة والجواب من الملاحظة فقط",
+                "أدوات الكتابة على النص المحدد أو الفقرة: تحسين، تصحيح، اختصار، إطالة، ترجمة، صياغة رسمية أو قانونية",
+                "«اسأل ملاحظاتك»: سؤال عن كل ملاحظاتك؛ البحث على الهاتف ويُرسل أقرب 5 ملاحظات فقط مع ذكر المصادر",
+                "تفريغ التسجيلات الصوتية إلى نص مع ملخص، ويصبح قابلاً للبحث",
+                "اقتراح عنوان ووسوم ومجلد تختار ما تقبله منها",
+                "المساعد متاح في كل ملاحظة غير مقفلة مهما كانت قصيرة، وتُحفظ نسخة قبل أي تغيير"
+            ),
+            en = listOf(
+                "Ask about this note: free conversation answered from the note only",
+                "Writing tools on the selection or paragraph: improve, fix, shorten, expand, translate, formal or legal wording",
+                "Ask your notes: a question about all notes; search runs on the phone and only the 5 closest notes are sent, with sources",
+                "Transcribe recordings to searchable text with a summary",
+                "Suggested title, tags and folder — you pick what to accept",
+                "The assistant is available in every unlocked note, however short; a version is kept before any change"
+            )
+        ),
+        Release(
+            "1.3.0", "2026-11-09",
+            ar = listOf(
+                "قراءة دقيقة للصور بزر واحد عبر Gemini بمفتاحك، تقرأ الجداول والمستندات الرسمية بعد موافقتك",
+                "قراءة الجهاز تقبل الآن النص القصير الواضح مثل كلمات المرور",
+                "عند تعذّر ماسح Google: تثبيته بضغطة، أو كاميرا الهاتف بوضع المستندات، أو التقاط سريع، أو صورة من المعرض",
+                "استيراد ملفات Samsung Notes بصيغة sdocx مباشرة: النص والصور",
+                "ملاحظات فرعية داخل ملاحظة رئيسية، وأيقونة لكل ملاحظة",
+                "قائمة «/» للإدراج، وكتل قابلة للطي، وكتل تنبيه",
+                "روابط بين الملاحظات بكتابة [[ مع قائمة الملاحظات التي تشير إلى كل ملاحظة",
+                "لون ثابت لكل تبويب ولكل إجراء: الحذف والأرشفة والحذف النهائي وغيرها"
+            ),
+            en = listOf(
+                "One-tap precise image reading with Gemini (your key), for tables and official documents, after consent",
+                "On-device reading now accepts short clear text such as passwords",
+                "When Google's scanner isn't available: install it in one tap, use the phone camera's document mode, a quick photo, or the gallery",
+                "Import Samsung Notes files (sdocx) directly: text and images",
+                "Sub-notes inside a parent note, and an icon per note",
+                "/ insert menu, toggle blocks and callout blocks",
+                "Links between notes with [[, plus the notes that link to each note",
+                "A fixed colour per tab and per action: delete, archive, delete forever and more"
+            )
+        ),
+        Release(
+            "1.2.0", "2026-11-08",
+            ar = listOf(
+                "أربعة تبويبات: الملاحظات، المهام والتذكيرات، المجلدات والوسوم، المزيد",
+                "تبويب المهام يجمع عناصر القوائم غير المنجزة والتذكيرات القادمة من كل ملاحظاتك",
+                "تحديد عدة ملاحظات بالضغط المطوّل، وزر «تراجع» بعد كل حذف",
+                "قراءة نص الصور أدق بالعربية، ولا يُعرض النص غير الواضح",
+                "حجم الخط من الإعدادات، وواجهة مكبّرة مناسبة للأجهزة اللوحية",
+                "الأرقام اللاتينية داخل النص العربي، وحقول الأرقام تقبل الأرقام العربية أيضاً",
+                "جولة تعريفية، وصفحة الإصدارات، وسجل تشخيص يخفي البيانات الحساسة",
+                "التحقق من التحديثات من GitHub مع فحص التوقيع قبل التثبيت"
+            ),
+            en = listOf(
+                "Four tabs: Notes, Tasks & reminders, Folders & tags, More",
+                "The Tasks tab gathers open checklist items and upcoming reminders from all notes",
+                "Select several notes with a long press, and Undo after every delete",
+                "More accurate Arabic text recognition; unclear text is no longer shown",
+                "Text size setting and a scaled layout for tablets",
+                "Latin digits inside Arabic text; number fields accept Arabic digits",
+                "A short tour, a releases page and a diagnostics log that masks sensitive data",
+                "Update check from GitHub with a signature check before installing"
+            )
+        ),
+        Release(
+            "1.1.3", "2026-11-07",
+            ar = listOf("إصلاح توقف التطبيق عند فتح الكاميرا بدل الماسح", "عزل قراءة النص في عملية مستقلة مع تقرير أعطال"),
+            en = listOf("Fixed a crash when the scanner falls back to the camera", "Text recognition runs in its own process, with a crash report")
+        ),
+        Release(
+            "1.1.0", "2026-11-05",
+            ar = listOf("محرر موحّد بالكتل: نص وقوائم ومرفقات", "قراءة نص الصور على الجهاز وجعلها قابلة للبحث", "سجل الإصدارات مع المقارنة", "مركز الترحيل والنقل بين هاتفين", "المساعد الذكي بمفتاحك الخاص وذاكرة Notea"),
+            en = listOf("Unified block editor: text, checklists and attachments", "On-device text recognition, searchable", "Version history with diff", "Migration center and phone-to-phone transfer", "AI assistant with your own key, and Notea Memory")
+        )
+    )
+
+    val current get() = releases.first()
+}

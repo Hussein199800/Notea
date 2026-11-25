@@ -2,8 +2,12 @@ package com.example.ui.editor
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
@@ -21,15 +25,29 @@ import androidx.compose.ui.unit.em
  * the markers visible but faded, so offsets never shift (identity mapping = fast + correct).
  */
 object MarkdownEngine {
-    private val bold = Regex("\\*\\*(?=\\S)(.+?)(?<=\\S)\\*\\*")
+    private val boldItalic = Regex("\\*\\*\\*(?=\\S)(.+?)(?<=\\S)\\*\\*\\*")
+    private val bold = Regex("\\*\\*(?=\\S)(.+?)(?<=\\S)\\*\\*(?!\\*)")
     private val italic = Regex("(?<![*\\w])\\*(?=[^\\s*])(.+?)(?<=[^\\s*])\\*(?![*\\w])")
     private val underline = Regex("\\+\\+(?=\\S)(.+?)(?<=\\S)\\+\\+")
     private val strike = Regex("~~(?=\\S)(.+?)(?<=\\S)~~")
-    private val link = Regex("\\[([^\\]\\n]+)]\\((https?://[^)\\s]+)\\)")
-    private val bareUrl = Regex("(?<![(\\[])\\bhttps?://[^\\s)]+")
-    private val heading = Regex("^(#{1,3}) ")
-    private val bullet = Regex("^(\\s*)([-*•]|\\d+[.)]) ")
+    private val link = Regex("\\[([^\\]\\n]+)]\\((https?://[^()\\s]++(?:\\([^()\\s]*+\\)[^()\\s]*+)*+)\\)", RegexOption.IGNORE_CASE)
+    private val bareUrl = Regex("\\bhttps?://(?:\\[[0-9a-f:.]+])?[^\\s<>\\[\\]{}\"]*", RegexOption.IGNORE_CASE)
+    private val heading = Regex("^(#{1,6}) ")
+    private val bullet = Regex("^(\\s*)([-+*•]|\\d+[.)]) ")
+    private val noteLink = Regex("\\[\\[([^\\[\\]\\n]{1,120})]]")
     private val quote = Regex("^> ")
+    private val fence = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
+    private val code = Regex("(?<!`)(`+)(.+?)(?<!`)\\1(?!`)")
+    private val escaped = Regex("""\\([\\\[\]`*+~#>!_.()\-])""")
+    private val sentencePunctuation = setOf('.', ',', '!', '?', ';', ':', '،', '؛', '؟', '…')
+
+    private enum class Inline(val pattern: Regex) {
+        ESCAPE(escaped), CODE(code), NOTE_LINK(noteLink), LINK(link), BOLD_ITALIC(boldItalic), BOLD(bold),
+        ITALIC(italic), UNDERLINE(underline), STRIKE(strike), URL(bareUrl)
+    }
+
+    /** Reader links to other notes ([[Title]]) are reported to onLinkClick with this prefix. */
+    const val NOTE_LINK_SCHEME = "notea-note:"
 
     data class Palette(val marker: Color, val link: Color, val quote: Color, val accent: Color)
 
@@ -41,7 +59,7 @@ object MarkdownEngine {
             val end = lineStart + line.length
             heading.find(line)?.let { m ->
                 val level = m.groupValues[1].length
-                b.addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = headingSizes[level - 1]), lineStart, end)
+                b.addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = headingSizes.getOrElse(level - 1) { headingSizes.lastOrNull() ?: 1.1.em }), lineStart, end)
                 b.addStyle(markerStyle, lineStart, lineStart + m.value.length)
             }
             bullet.find(line)?.let { m ->
@@ -61,19 +79,33 @@ object MarkdownEngine {
                 b.addStyle(markerStyle, m.range.last + 1 - close, m.range.last + 1)
             }
         }
+        inline(boldItalic, 3, 3, SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic))
         inline(bold, 2, 2, SpanStyle(fontWeight = FontWeight.Bold))
         inline(italic, 1, 1, SpanStyle(fontStyle = FontStyle.Italic))
         inline(underline, 2, 2, SpanStyle(textDecoration = TextDecoration.Underline))
         inline(strike, 2, 2, SpanStyle(textDecoration = TextDecoration.LineThrough))
-        for (m in link.findAll(text)) {
+        val links = link.findAll(text).toList()
+        for (m in links) {
             b.addStyle(markerStyle, m.range.first, m.range.last + 1)
             val g = m.groups[1]!!.range
             b.addStyle(SpanStyle(color = p.link, textDecoration = TextDecoration.Underline), g.first, g.last + 1)
             b.addStringAnnotation("url", m.groupValues[2], m.range.first, m.range.last + 1)
         }
+        // [[note links]]: brackets dimmed, title coloured like a link.
+        for (m in noteLink.findAll(text)) {
+            b.addStyle(markerStyle, m.range.first, m.range.first + 2)
+            b.addStyle(markerStyle, m.range.last - 1, m.range.last + 1)
+            b.addStyle(SpanStyle(color = p.link, fontWeight = FontWeight.Medium), m.range.first + 2, m.range.last - 1)
+        }
+        var nextLink = 0
         for (m in bareUrl.findAll(text)) {
-            b.addStyle(SpanStyle(color = p.link, textDecoration = TextDecoration.Underline), m.range.first, m.range.last + 1)
-            b.addStringAnnotation("url", m.value, m.range.first, m.range.last + 1)
+            while (nextLink < links.size && links[nextLink].range.last < m.range.first) nextLink++
+            if (links.getOrNull(nextLink)?.let { m.range.first in it.range } == true) continue
+            val url = trimUrl(m.value)
+            if (url.substringAfter("://").isEmpty()) continue
+            val end = m.range.first + url.length
+            b.addStyle(SpanStyle(color = p.link, textDecoration = TextDecoration.Underline), m.range.first, end)
+            b.addStringAnnotation("url", url, m.range.first, end)
         }
         return b.toAnnotatedString()
     }
@@ -91,17 +123,153 @@ object MarkdownEngine {
     /** URL under the cursor, if any (to offer "open link"). */
     fun urlAt(text: String, offset: Int): String? {
         link.findAll(text).firstOrNull { offset in it.range.first..it.range.last + 1 }?.let { return it.groupValues[2] }
-        return bareUrl.findAll(text).firstOrNull { offset in it.range.first..it.range.last + 1 }?.value
+        return bareUrl.findAll(text).firstNotNullOfOrNull { m ->
+            val url = trimUrl(m.value)
+            url.takeIf { it.substringAfter("://").isNotEmpty() && offset in m.range.first..m.range.first + it.length }
+        }
     }
 
     /** Plain preview for cards/widgets/search snippets: markers removed. */
-    fun plain(text: String): String = text
-        .replace(link) { it.groupValues[1] }
-        .replace(bold) { it.groupValues[1] }
-        .replace(underline) { it.groupValues[1] }
-        .replace(strike) { it.groupValues[1] }
-        .replace(italic) { it.groupValues[1] }
-        .lines().joinToString("\n") { l -> l.replace(heading, "").replace(quote, "").replace(Regex("^(\\s*)[-*] "), "$1• ") }
+    fun plain(text: String): String = render(text, null).text
+
+    /** Reader rendering shares the stored Markdown syntax without exposing the edit markers. */
+    fun render(text: String, palette: Palette?, onLinkClick: ((String) -> Unit)? = null): AnnotatedString {
+        val out = AnnotatedString.Builder()
+        var codeFence: String? = null
+        var firstLine = true
+        for (line in text.lineSequence()) {
+            val currentFence = codeFence
+            val fenceMatch = fence.matchEntire(line)
+            if (fenceMatch != null) {
+                val (marker, info) = fenceMatch.destructured
+                if (currentFence == null && (marker.first() != '`' || '`' !in info)) {
+                    codeFence = marker
+                    continue
+                }
+                if (currentFence != null && marker.first() == currentFence.first() && marker.length >= currentFence.length && info.isBlank()) {
+                    codeFence = null
+                    continue
+                }
+            }
+            if (!firstLine) out.append('\n')
+            firstLine = false
+            val start = out.length
+            if (currentFence != null) {
+                out.append(line)
+                if (palette != null && out.length > start) out.addStyle(SpanStyle(fontFamily = FontFamily.Monospace), start, out.length)
+                continue
+            }
+            val title = heading.find(line)
+            val quotation = quote.find(line)
+            val listItem = bullet.find(line)
+            val contentStart = when {
+                title != null -> title.value.length
+                quotation != null -> quotation.value.length
+                listItem != null -> {
+                    val (indent, marker) = listItem.destructured
+                    out.append(indent)
+                    val markerStart = out.length
+                    // Ordered markers ("1.") are isolated as LTR so Arabic paragraphs show "1." and not ".1".
+                    out.append(if (marker.length == 1) "•" else if (palette != null) "\u2066$marker\u2069" else marker)
+                    if (palette != null) out.addStyle(SpanStyle(color = palette.accent, fontWeight = FontWeight.Bold), markerStart, out.length)
+                    out.append(' ')
+                    listItem.value.length
+                }
+                else -> 0
+            }
+            appendInline(out, line.substring(contentStart), palette, onLinkClick)
+            if (palette != null && out.length > start) {
+                if (title != null) {
+                    val fontSize = when (title.groupValues[1].length) {
+                        1 -> 1.45.em
+                        2 -> 1.25.em
+                        else -> 1.1.em
+                    }
+                    out.addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = fontSize), start, out.length)
+                } else if (quotation != null) {
+                    out.addStyle(SpanStyle(color = palette.quote, fontStyle = FontStyle.Italic), start, out.length)
+                }
+            }
+        }
+        return out.toAnnotatedString()
+    }
+
+    private fun appendInline(
+        out: AnnotatedString.Builder,
+        line: String,
+        palette: Palette?,
+        onLinkClick: ((String) -> Unit)?,
+        allowLinks: Boolean = true
+    ) {
+        val matches = Inline.entries.asSequence()
+            .filter { allowLinks || (it != Inline.LINK && it != Inline.URL) }
+            .flatMap { token -> token.pattern.findAll(line).map { token to it } }
+            .sortedBy { (_, match) -> match.range.first }
+        var cursor = 0
+        for ((token, match) in matches) {
+            if (match.range.first < cursor) continue
+            out.append(line, cursor, match.range.first)
+            val start = out.length
+            var next = match.range.last + 1
+            when (token) {
+                Inline.ESCAPE -> out.append(match.groupValues[1])
+                Inline.CODE -> {
+                    out.append(match.groupValues[2])
+                    if (palette != null) out.addStyle(SpanStyle(fontFamily = FontFamily.Monospace), start, out.length)
+                }
+                Inline.NOTE_LINK -> {
+                    // [[Title]]: shown as the title; in the reader it opens that note (notea-note:Title).
+                    out.append(match.groupValues[1])
+                    if (palette != null) {
+                        val styles = TextLinkStyles(style = SpanStyle(color = palette.link, fontWeight = FontWeight.Medium))
+                        val target = NOTE_LINK_SCHEME + match.groupValues[1].trim()
+                        if (onLinkClick != null) out.addLink(LinkAnnotation.Clickable(target, styles, LinkInteractionListener { onLinkClick(target) }), start, out.length)
+                        else out.addStyle(styles.style!!, start, out.length)
+                    }
+                }
+                Inline.LINK, Inline.URL -> {
+                    val url = if (token == Inline.LINK) match.groupValues[2] else trimUrl(match.value)
+                    if (token == Inline.LINK) appendInline(out, match.groupValues[1], palette, onLinkClick, allowLinks = false)
+                    else {
+                        out.append(url)
+                        next = match.range.first + url.length
+                    }
+                    if (palette != null && url.substringAfter("://").isNotEmpty()) {
+                        val styles = TextLinkStyles(style = SpanStyle(color = palette.link, textDecoration = TextDecoration.Underline))
+                        val listener = onLinkClick?.let { open -> LinkInteractionListener { open(url) } }
+                        out.addLink(LinkAnnotation.Url(url, styles, listener), start, out.length)
+                    }
+                }
+                else -> {
+                    appendInline(out, match.groupValues[1], palette, onLinkClick, allowLinks)
+                    if (palette != null) {
+                        val style = when (token) {
+                            Inline.BOLD_ITALIC -> SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)
+                            Inline.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+                            Inline.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                            Inline.UNDERLINE -> SpanStyle(textDecoration = TextDecoration.Underline)
+                            else -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                        }
+                        out.addStyle(style, start, out.length)
+                    }
+                }
+            }
+            cursor = next
+        }
+        out.append(line, cursor, line.length)
+    }
+
+    private fun trimUrl(url: String): String {
+        var unmatchedClosing = url.count { it == ')' } - url.count { it == '(' }
+        var end = url.length
+        while (end > 0) {
+            val c = url[end - 1]
+            if (c == ')' && unmatchedClosing > 0) unmatchedClosing--
+            else if (c !in sentencePunctuation) break
+            end--
+        }
+        return url.substring(0, end)
+    }
 
     // ------------------------------------------------------------------ editing commands
     fun toggleInline(v: TextFieldValue, marker: String): TextFieldValue {
@@ -131,7 +299,7 @@ object MarkdownEngine {
         val endIdx = t.indexOf('\n', v.selection.max).let { if (it < 0) t.length else it }
         val block = t.substring(start, endIdx)
         val lines = block.split('\n')
-        val anyPrefixRegex = Regex("^(#{1,3} |[-*•] |\\d+[.)] |> )")
+        val anyPrefixRegex = Regex("^(#{1,6} |[-+*•] |\\d+[.)] |> )")
         val allHave = lines.all { it.startsWith(prefix) || (prefix == "1. " && Regex("^\\d+[.)] ").containsMatchIn(it)) }
         var counter = 0
         val newLines = lines.map { l ->
@@ -163,7 +331,7 @@ object MarkdownEngine {
     fun continueList(old: TextFieldValue, new: TextFieldValue): TextFieldValue? {
         if (new.text.length != old.text.length + 1 || !new.selection.collapsed) return null
         val pos = new.selection.start
-        if (pos == 0 || new.text[pos - 1] != '\n') return null
+        if (pos !in 1..new.text.length || new.text[pos - 1] != '\n' || new.text.removeRange(pos - 1, pos) != old.text) return null
         val lineStart = new.text.lastIndexOf('\n', pos - 2).let { if (it < 0) 0 else it + 1 }
         val prevLine = new.text.substring(lineStart, pos - 1)
         val m = bullet.find(prevLine) ?: return null
@@ -174,7 +342,8 @@ object MarkdownEngine {
             return TextFieldValue(nt, TextRange(lineStart))
         }
         val nextMarker = Regex("(\\d+)([.)])").find(marker)?.let { d ->
-            marker.replaceFirst(d.value, "${d.groupValues[1].toInt() + 1}${d.groupValues[2]}")
+            val number = d.groupValues[1].toIntOrNull()?.takeIf { it < Int.MAX_VALUE } ?: return null
+            marker.replaceFirst(d.value, "${number + 1}${d.groupValues[2]}")
         } ?: marker
         val nt = new.text.substring(0, pos) + nextMarker + new.text.substring(pos)
         return TextFieldValue(nt, TextRange(pos + nextMarker.length))

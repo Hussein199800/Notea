@@ -50,13 +50,15 @@ object FirestoreMapper {
         // Layout only: text blocks carry their length; the text itself is in "content" (no duplication).
         "blocks" to (if (n.isLocked || blocks == null) emptyList() else blocks.take(500).map { b ->
             when (b.type) {
-                com.example.data.local.BlockType.TEXT -> mapOf("id" to b.id, "type" to b.type, "len" to b.text.length.toLong())
+                in com.example.data.local.BlockType.TEXTUAL -> mapOf("id" to b.id, "type" to b.type, "len" to b.text.length.toLong())
                 else -> mapOf("id" to b.id, "type" to b.type, "attachmentId" to (b.attachmentId ?: ""))
             }
         }),
         "reminderAt" to (reminderAt ?: 0L),
         "clientUpdatedAt" to n.updatedAt,
-        "deviceId" to deviceId
+        "deviceId" to deviceId,
+        "parentId" to (n.parentId ?: ""),
+        "icon" to n.icon.take(16)
     )
 
     fun noteFromSnapshot(doc: DocumentSnapshot, uid: String): RemoteNote? {
@@ -81,7 +83,7 @@ object FirestoreMapper {
             val layout = (data["blocks"] as? List<Map<String, Any?>>).orEmpty().mapNotNull { b ->
                 val id = b["id"] as? String ?: return@mapNotNull null
                 val type = b["type"] as? String ?: return@mapNotNull null
-                Triple(id, type, if (type == com.example.data.local.BlockType.TEXT) b["len"] else (b["attachmentId"] as? String)?.ifBlank { null })
+                Triple(id, type, if (type in com.example.data.local.BlockType.TEXTUAL) b["len"] else (b["attachmentId"] as? String)?.ifBlank { null })
             }
             val blocks = if (isLocked || layout.isEmpty()) null else com.example.data.repository.Blocks.fromLayout(layout, content)
             @Suppress("UNCHECKED_CAST")
@@ -103,7 +105,9 @@ object FirestoreMapper {
                     updatedAt = clientUpdatedAt,
                     syncState = SyncState.CLEAN,
                     baseRemoteUpdatedAt = clientUpdatedAt,
-                    legacyCategory = category
+                    legacyCategory = category,
+                    parentId = (data["parentId"] as? String)?.takeIf { it.isNotBlank() },
+                    icon = (data["icon"] as? String).orEmpty().take(16)
                 ),
                 checklist = checklist,
                 tags = tags,

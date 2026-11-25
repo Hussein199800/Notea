@@ -26,14 +26,25 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class NoteaApp : Application(), coil.ImageLoaderFactory {
+open class NoteaApp : Application(), coil.ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
     override fun onCreate() {
         super.onCreate()
+        // The isolated OCR helper process (":ocr") must not start the app's database, sync or jobs.
+        if (isHelperProcess()) return
+        com.example.core.CrashReporter.install(this)
         container = AppContainer(this)
         container.onAppStart()
+    }
+
+    private fun isHelperProcess(): Boolean {
+        val name = if (android.os.Build.VERSION.SDK_INT >= 28) getProcessName() else runCatching {
+            val pid = android.os.Process.myPid()
+            (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+        }.getOrNull()
+        return name?.endsWith(":ocr") == true
     }
 
     /** Images: animated GIF/WebP (ImageDecoder on 28+, GifDecoder before) and SVG everywhere. */
@@ -54,6 +65,7 @@ class AppContainer(val app: Application) {
     val settings = SettingsStore(app)
     val db: NoteaDatabase = NoteaDatabase.getInstance(app)
     val keyVault = KeyVault(app)
+    val updater by lazy { com.example.core.update.Updater(app, scope) }
     val reminderScheduler = ReminderScheduler(app)
     val attachmentStore = AttachmentStore(app)
 
@@ -89,7 +101,10 @@ class AppContainer(val app: Application) {
 
     fun syncAvailable(uid: String) = firebaseAvailable && uid != LOCAL_UID
 
-    val aiKeys by lazy { com.example.core.ai.AiKeyStore(app) }
+    /** Device-keystore-wrapped Gemini key. Replaceable only by tests (Robolectric has no Android Keystore). */
+    @androidx.annotation.VisibleForTesting
+    var aiKeysWrapper: com.example.core.security.DeviceKeyWrapper? = null
+    val aiKeys by lazy { aiKeysWrapper?.let { com.example.core.ai.AiKeyStore(app, it) } ?: com.example.core.ai.AiKeyStore(app) }
     val assistant by lazy { com.example.core.ai.NoteAssistant(com.example.core.ai.GeminiClient(), aiKeys) }
 
     /** Assistant is offered only when the user enabled it and saved a key. */
@@ -133,8 +148,22 @@ class AppContainer(val app: Application) {
             LegacyUpgrader(db, repository, isArabic()).run()
             if (db.searchDao().count() == 0) db.noteDao().knownUserIds().forEach { repository.reindexAll(it) }
             rescheduleAllReminders()
+            rerunOcrWithBetterModel()
         }
         AutoBackupWorker.schedule(app, settings.state.value.autoBackup)
+        if (app.packageName == com.example.core.update.UpdateRules.PACKAGE) com.example.core.update.UpdateCheckWorker.schedule(app)
+    }
+
+    /** One-time: text read by the old fast model is discarded and read again with the accurate model + filter. */
+    private suspend fun rerunOcrWithBetterModel() {
+        val prefs = app.getSharedPreferences("notea_ocr", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean("rerun_v2", false)) return
+        db.attachmentDao().allScannable().filter { it.extractedText.isNotEmpty() }.forEach { a ->
+            db.attachmentDao().upsert(a.copy(extractedText = ""))
+            repository.reindexNote(a.userId, a.noteId)
+            com.example.ocr.OcrWorker.enqueue(app, a.id)
+        }
+        prefs.edit().putBoolean("rerun_v2", true).apply()
     }
 
     suspend fun rescheduleAllReminders() {

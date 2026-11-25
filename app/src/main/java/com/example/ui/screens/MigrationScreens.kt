@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -150,8 +151,10 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
     }
     fun qrPhoto() {
         qrFile.parentFile?.mkdirs()
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", qrFile)
-        runCatching { qrCapture.launch(uri) }.onFailure { error = s.scannerUnavailable }
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", qrFile)
+            qrCapture.launch(uri)
+        }.onFailure { error = s.scannerUnavailable }
     }
 
     PageScaffold(s.transferTitle, onBack = { data.cancelTransfer(); session.back() }) {
@@ -193,24 +196,16 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
                             TransferState.Failed -> ExpandableText(s.transferFailed, collapsedLines = 3, color = MaterialTheme.colorScheme.error)
                             else -> Unit
                         }
-                        Button(onClick = {
-                            val scanner = runCatching { com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context) }.getOrNull()
-                            scope.launch {
-                                if (scanner != null && com.example.ui.platform.GmsModules.ready(context, scanner)) {
-                                    scanner.startScan()
-                                        .addOnSuccessListener { b -> connect(b.rawValue?.let { DeviceTransfer.parse(it) }) }
-                                        .addOnFailureListener { qrPhoto() }
-                                } else qrPhoto() // no Google scanner: photo + on-device decoding
-                            }
-                        }, modifier = Modifier.fillMaxWidth()) {
+                        // QR: a photo of the other phone's code, decoded on the device (no Google scanner).
+                        Button(onClick = { qrPhoto() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Rounded.QrCodeScanner, null); Spacer(Modifier.width(8.dp)); Text(s.scanQr)
                         }
                         Text(s.enterManually, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(address, { address = it.replace("\n", "") }, label = { Text(s.transferAddress) }, placeholder = { Text("192.168.1.5:40123") },
+                                OutlinedTextField(address, { address = com.example.core.text.Digits.latin(it.replace("\n", "")) }, label = { Text(s.transferAddress) }, placeholder = { Text("192.168.1.5:40123") },
                                     maxLines = 2, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(code, { code = it.uppercase().replace("\n", "") }, label = { Text(s.transferCode) }, placeholder = { Text("ABCD-EFGH-JKLM") },
+                                OutlinedTextField(code, { code = com.example.core.text.Digits.latin(it.uppercase().replace("\n", "")) }, label = { Text(s.transferCode) }, placeholder = { Text("ABCD-EFGH-JKLM") },
                                     maxLines = 2, modifier = Modifier.fillMaxWidth())
                             }
                         }

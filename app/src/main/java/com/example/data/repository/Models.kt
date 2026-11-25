@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import com.example.data.local.BlockType
 import com.example.data.local.ChecklistItemEntity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -35,7 +36,11 @@ data class NoteDraft(
     val updatedAt: Long? = null,
     val importSource: String = "",
     /** Ordered layout (v3). Null = classic layout (text, checklist, attachments). */
-    val blocks: List<BlockDraft>? = null
+    val blocks: List<BlockDraft>? = null,
+    /** v4. Null = keep the stored parent (change it with NoteRepository.setParent). */
+    val parentId: String? = null,
+    /** v4. Null = keep the stored icon. */
+    val icon: String? = null
 ) {
     val isBlank: Boolean get() = title.isBlank() && body.isBlank() && checklist.all { it.text.isBlank() }
 }
@@ -48,12 +53,33 @@ object Blocks {
 
     /** Canonical note body = text blocks joined by a blank line (used for search, previews, sync). */
     fun joinText(blocks: List<BlockDraft>): String =
-        blocks.filter { it.type == com.example.data.local.BlockType.TEXT }.joinToString(SEPARATOR) { it.text }
+        blocks.filter { it.type in com.example.data.local.BlockType.TEXTUAL }.joinToString(SEPARATOR) { it.text }
 
     fun defaultLayout(body: String, checklist: List<ChecklistDraft>, attachmentIds: List<String>): List<BlockDraft> = buildList {
-        add(BlockDraft(type = com.example.data.local.BlockType.TEXT, text = body))
-        if (checklist.isNotEmpty()) add(BlockDraft(id = DEFAULT_CHECKLIST, type = com.example.data.local.BlockType.CHECKLIST))
-        attachmentIds.forEach { add(BlockDraft(type = com.example.data.local.BlockType.ATTACHMENT, attachmentId = it)) }
+        add(BlockDraft(type = BlockType.TEXT, text = body))
+        checklist.map { it.blockId ?: DEFAULT_CHECKLIST }.distinct().forEach { id ->
+            add(BlockDraft(id = id, type = BlockType.CHECKLIST))
+        }
+        attachmentIds.forEach { add(BlockDraft(type = BlockType.ATTACHMENT, attachmentId = it)) }
+    }
+
+    /** The classic checklist ID is shared in memory, but stored block IDs are globally unique. */
+    internal fun scopeDefaultChecklist(
+        noteId: String,
+        blocks: List<BlockDraft>?,
+        checklist: List<ChecklistDraft>
+    ): Pair<List<BlockDraft>?, List<ChecklistDraft>> {
+        val id = "$DEFAULT_CHECKLIST-$noteId"
+        if (blocks == null || blocks.none { it.type == BlockType.CHECKLIST && (it.id == DEFAULT_CHECKLIST || it.id == id) }) {
+            return blocks to checklist
+        }
+        val layout = blocks.map { block ->
+            if (block.type == BlockType.CHECKLIST && block.id == DEFAULT_CHECKLIST) block.copy(id = id) else block
+        }
+        val items = checklist.map { item ->
+            if (item.blockId == null || item.blockId == DEFAULT_CHECKLIST) item.copy(blockId = id) else item
+        }
+        return layout to items
     }
 
     /**
@@ -95,7 +121,7 @@ object Blocks {
         var firstText = true
         for ((id, type, extra) in layout) {
             when (type) {
-                com.example.data.local.BlockType.TEXT -> {
+                com.example.data.local.BlockType.TEXT, com.example.data.local.BlockType.TOGGLE, com.example.data.local.BlockType.CALLOUT -> {
                     if (!firstText) { if (!body.startsWith(SEPARATOR, pos)) return null; pos += SEPARATOR.length }
                     val len = (extra as? Number)?.toInt() ?: return null
                     if (pos + len > body.length) return null

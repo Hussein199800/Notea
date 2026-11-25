@@ -104,7 +104,7 @@ class NoteRepository(
             isPinned = n.isPinned, isFavorite = n.isFavorite, isArchived = n.isArchived, trashedAt = n.trashedAt,
             isLocked = n.isLocked, lockPinHash = n.lockPinHash, lockHint = n.lockHint,
             tags = d.tags.map { it.name }, checklist = dec.checklist, createdAt = n.createdAt, updatedAt = n.updatedAt,
-            importSource = n.importSource, blocks = dec.blocks
+            importSource = n.importSource, blocks = dec.blocks, parentId = n.parentId, icon = n.icon
         )
     }
 
@@ -115,8 +115,8 @@ class NoteRepository(
      */
     suspend fun save(uid: String, input: NoteDraft, markDirty: Boolean = true): NoteEntity {
         // With a block layout, the canonical body is derived from the text blocks.
-        val layout = input.blocks?.let { Blocks.normalize(it) }
-        val draft = if (layout != null) input.copy(blocks = layout, body = Blocks.joinText(layout)) else input
+        val (layout, items) = Blocks.scopeDefaultChecklist(input.id, input.blocks?.let(Blocks::normalize), input.checklist)
+        val draft = if (layout != null) input.copy(blocks = layout, body = Blocks.joinText(layout), checklist = items) else input
         val existing = notes.getNote(draft.id)
         val ts = now()
         val storedBody: String
@@ -151,7 +151,9 @@ class NoteRepository(
             legacyCategory = existing?.legacyCategory ?: "",
             legacyPending = 0,
             importSource = draft.importSource.ifBlank { existing?.importSource ?: "" },
-            contentHash = if (draft.isLocked) "" else contentHash(draft.title, draft.body, draft.checklist)
+            contentHash = if (draft.isLocked) "" else contentHash(draft.title, draft.body, draft.checklist),
+            parentId = (draft.parentId ?: existing?.parentId)?.takeIf { it != draft.id },
+            icon = (draft.icon ?: existing?.icon ?: "").take(16)
         )
         val wasLocked = existing?.isLocked == true
         db.withTransaction {
@@ -163,6 +165,7 @@ class NoteRepository(
             blockDao.replaceForNote(entity.id, if (draft.isLocked || layout == null) emptyList() else layout.mapIndexed { i, b ->
                 NoteBlockEntity(b.id, entity.id, i, b.type, b.text, b.attachmentId)
             })
+            if (draft.isLocked) attachmentDao.clearExtractedText(entity.id)
             setTags(uid, entity.id, draft.tags)
             reindex(uid, entity, draft.body, draft.checklist, draft.tags)
         }
@@ -229,6 +232,28 @@ class NoteRepository(
     suspend fun moveToFolder(uid: String, id: String, folderId: String?) = update(uid, id) { it.copy(folderId = folderId) }
     suspend fun moveToTrash(uid: String, id: String) = update(uid, id) { it.copy(trashedAt = now(), isPinned = false) }
     suspend fun restoreFromTrash(uid: String, id: String) = update(uid, id) { it.copy(trashedAt = null) }
+    /** Restores sub-note/icon metadata from a backup without touching the note's dates. */
+    suspend fun restoreMeta(uid: String, id: String, parentId: String?, icon: String) {
+        val n = notes.getNote(id) ?: return
+        if (parentId == id) return
+        notes.upsert(n.copy(parentId = parentId ?: n.parentId, icon = icon.ifBlank { n.icon }.take(16), syncState = SyncState.DIRTY))
+        listener.onNotesChanged(uid)
+    }
+    suspend fun setIcon(uid: String, id: String, icon: String) = update(uid, id) { it.copy(icon = icon.take(16)) }
+
+    /** Moves [id] under [parentId] (null = top level). Refuses cycles (a note can't go under its own descendant). */
+    suspend fun setParent(uid: String, id: String, parentId: String?): Boolean {
+        if (parentId != null) {
+            var cur: String? = parentId
+            var guard = 0
+            while (cur != null && guard++ < 64) {
+                if (cur == id) return false
+                cur = notes.getNote(cur)?.parentId
+            }
+        }
+        update(uid, id) { it.copy(parentId = parentId) }
+        return true
+    }
 
     /** Permanent delete. Synced notes become tombstones until the remote delete is confirmed. */
     suspend fun deletePermanently(uid: String, id: String) {
@@ -259,7 +284,7 @@ class NoteRepository(
     }
 
     // ---------------------------------------------------------------- sync support
-    /** Writes a note exactly as stored remotely (ciphertext stays ciphertext); does not mark dirty. */
+    /** Applies the remote state locally, preserving ciphertext and leaving the note clean. */
     suspend fun applyStored(uid: String, n: NoteEntity, checklist: List<ChecklistDraft>, tagNames: List<String>, reminderAt: Long?, blocks: List<BlockDraft>? = null) {
         val existing = notes.getNote(n.id)
         val entity = n.copy(
@@ -271,18 +296,21 @@ class NoteRepository(
             contentHash = if (n.isLocked) "" else contentHash(n.title, n.body, checklist)
         )
         db.withTransaction {
+            // Keep this device's layout when an older app wrote the same body without layout.
+            val local = if (blocks == null && !n.isLocked) {
+                blockDao.forNote(n.id).map { BlockDraft(it.id, it.type, it.text, it.attachmentId) }
+            } else null
+            val (layout, items) = Blocks.scopeDefaultChecklist(n.id, blocks ?: local?.takeIf { Blocks.joinText(it) == n.body }, checklist)
             notes.upsert(entity)
-            checklists.replaceForNote(n.id, checklist.mapIndexed { i, c -> ChecklistItemEntity(c.id, n.id, c.text, c.checked, i, c.blockId) })
-            // Keep this device's layout when the remote copy has none (e.g. written by an older app version).
-            if (n.isLocked) blockDao.deleteForNote(n.id)
-            else if (blocks != null) blockDao.replaceForNote(n.id, blocks.mapIndexed { i, b -> NoteBlockEntity(b.id, n.id, i, b.type, b.text, b.attachmentId) })
-            else {
-                val local = blockDao.forNote(n.id).map { BlockDraft(it.id, it.type, it.text, it.attachmentId) }
-                if (local.isNotEmpty() && Blocks.joinText(local) != n.body) blockDao.deleteForNote(n.id)
+            checklists.replaceForNote(n.id, items.mapIndexed { i, c -> ChecklistItemEntity(c.id, n.id, c.text, c.checked, i, c.blockId) })
+            if (n.isLocked || layout == null) blockDao.deleteForNote(n.id)
+            else if (layout != local) {
+                blockDao.replaceForNote(n.id, layout.mapIndexed { i, b -> NoteBlockEntity(b.id, n.id, i, b.type, b.text, b.attachmentId) })
             }
+            if (n.isLocked) attachmentDao.clearExtractedText(n.id)
             setTags(uid, n.id, tagNames)
+            reindexNote(uid, n.id)
         }
-        reindexNote(uid, n.id)
         val current = reminders.forNote(n.id).filter { it.status != ReminderStatus.DONE }.minByOrNull { it.triggerAt }
         if (reminderAt != current?.triggerAt) {
             reminders.forNote(n.id).forEach { listener.onReminderCancelled(it.id); reminders.delete(it.id) }
@@ -322,14 +350,20 @@ class NoteRepository(
 
     /** Copies an already-encrypted attachment (from a backup) without decrypting it. */
     suspend fun addRawAttachment(uid: String, noteId: String, a: com.example.data.importer.ImportedAttachment): String {
-        val id = a.originalId?.takeIf { attachmentDao.get(it) == null } ?: Ids.newId()
-        val stored = a.open().use { attachments.save(uid, id, it, null) }
-        attachmentDao.upsert(
+        val note = checkNotNull(notes.getNote(noteId))
+        check(note.userId == uid && note.isLocked)
+        val id = a.originalId?.takeIf { AttachmentStore.isPathSegment(it) && attachmentDao.get(it) == null } ?: Ids.newId()
+        val position = attachmentDao.forNote(noteId).size
+        val stored = a.open().buffered().use {
+            require(NoteCipher.isEncryptedStream(it))
+            attachments.save(uid, id, it, null)
+        }
+        upsertStoredAttachment(
             AttachmentEntity(
                 id = id, noteId = noteId, userId = uid, kind = a.kind, mimeType = a.mime, displayName = a.name,
                 localPath = stored.relativePath, sizeBytes = stored.size, durationMs = a.durationMs, url = a.url,
-                linkTitle = a.linkTitle, linkDescription = a.linkDescription, extractedText = a.extractedText,
-                encrypted = true, createdAt = a.createdAt ?: now(), position = attachmentDao.forNote(noteId).size
+                linkTitle = a.linkTitle, linkDescription = a.linkDescription,
+                encrypted = true, createdAt = a.createdAt ?: now(), position = position
             )
         )
         return id
@@ -390,32 +424,45 @@ class NoteRepository(
         url: String = "", linkTitle: String = "", linkDescription: String = "", createdAt: Long? = null,
         preferredId: String? = null
     ): AttachmentEntity {
-        val note = notes.getNote(noteId)
-        val locked = note?.isLocked == true
-        val key = if (locked) keyVault.masterKey(uid) ?: throw VaultLockedException() else null
-        val id = preferredId?.takeIf { attachmentDao.get(it) == null } ?: Ids.newId()
-        val stored = input?.use { attachments.save(uid, id, it, key) }
-        val entity = AttachmentEntity(
-            id = id, noteId = noteId, userId = uid, kind = kind, mimeType = mime,
-            displayName = displayName.take(200), localPath = stored?.relativePath ?: "", sizeBytes = stored?.size ?: 0L,
-            durationMs = durationMs, url = url, linkTitle = linkTitle.take(300), linkDescription = linkDescription.take(600),
-            extractedText = extractedText.take(200_000), encrypted = key != null,
-            createdAt = createdAt ?: now(), position = attachmentDao.forNote(noteId).size
-        )
-        attachmentDao.upsert(entity)
+        val entity = input.use { stream ->
+            val note = checkNotNull(notes.getNote(noteId))
+            check(note.userId == uid)
+            val key = if (note.isLocked) keyVault.masterKey(uid) ?: throw VaultLockedException() else null
+            val id = preferredId?.takeIf { AttachmentStore.isPathSegment(it) && attachmentDao.get(it) == null } ?: Ids.newId()
+            val position = attachmentDao.forNote(noteId).size
+            val stored = stream?.let { attachments.save(uid, id, it, key) }
+            AttachmentEntity(
+                id = id, noteId = noteId, userId = uid, kind = kind, mimeType = mime,
+                displayName = displayName.take(200), localPath = stored?.relativePath ?: "", sizeBytes = stored?.size ?: 0L,
+                durationMs = durationMs, url = url, linkTitle = linkTitle.take(300), linkDescription = linkDescription.take(600),
+                extractedText = if (key == null) extractedText.take(200_000) else "", encrypted = key != null,
+                createdAt = createdAt ?: now(), position = position
+            )
+        }
+        upsertStoredAttachment(entity)
         reindexNote(uid, noteId)
         update(uid, noteId) { it }
         if ((kind == AttachmentKind.IMAGE || kind == AttachmentKind.PDF) && !entity.encrypted && extractedText.isBlank()) listener.onScannableAttachment(entity)
         return entity
     }
 
+    private suspend fun upsertStoredAttachment(entity: AttachmentEntity) {
+        try {
+            attachmentDao.upsert(entity)
+        } catch (e: Exception) {
+            attachments.delete(entity.userId, entity.localPath)
+            throw e
+        }
+    }
+
     /** Stores OCR text (never for locked notes) and makes it searchable. */
     suspend fun setExtractedText(attachmentId: String, text: String) {
-        val a = attachmentDao.get(attachmentId) ?: return
-        val note = notes.getNote(a.noteId) ?: return
-        if (note.isLocked) return
-        attachmentDao.upsert(a.copy(extractedText = text.take(200_000)))
-        reindexNote(a.userId, a.noteId)
+        db.withTransaction {
+            if (attachmentDao.updateExtractedText(attachmentId, text.take(200_000)) != 0) {
+                val attachment = checkNotNull(attachmentDao.get(attachmentId))
+                reindexNote(attachment.userId, attachment.noteId)
+            }
+        }
     }
 
     fun observeAttachments(noteId: String) = attachmentDao.observeForNote(noteId)
@@ -430,8 +477,10 @@ class NoteRepository(
 
     suspend fun attachmentsFor(noteId: String) = attachmentDao.forNote(noteId)
 
-    fun openAttachment(uid: String, a: AttachmentEntity): InputStream =
-        attachments.open(uid, a.localPath, if (a.encrypted) keyVault.masterKey(uid) ?: throw VaultLockedException() else null)
+    fun openAttachment(uid: String, a: AttachmentEntity): InputStream {
+        require(a.userId == uid)
+        return attachments.open(uid, a.localPath, if (a.encrypted) keyVault.masterKey(uid) ?: throw VaultLockedException() else null)
+    }
 
     private suspend fun reencryptAttachments(uid: String, noteId: String, toLocked: Boolean) {
         val mk = keyVault.masterKey(uid) ?: return
@@ -482,13 +531,16 @@ class NoteRepository(
 
     // ---------------------------------------------------------------- revisions
     /** Stores a snapshot of the current stored state (ciphertext for locked notes). */
-    suspend fun snapshot(noteId: String, reason: String = RevisionReason.AUTO, label: String = "") {
-        val d = notes.getNoteWithDetails(noteId) ?: return
+    suspend fun snapshot(noteId: String, reason: String = RevisionReason.AUTO, label: String = "") = db.withTransaction {
+        val d = notes.getNoteWithDetails(noteId) ?: return@withTransaction
         val latest = revisions.latest(noteId)
         val checklistJson = d.checklist.toDrafts().toJson()
         val blocksJson = d.blocks.sortedBy { it.position }.map { BlockDraft(it.id, it.type, it.text, it.attachmentId) }.ifEmpty { null }?.blocksToJson().orEmpty()
-        if (label.isBlank() && latest != null && latest.title == d.note.title && latest.body == d.note.body && latest.checklistJson == checklistJson) return
-        revisions.insert(RevisionEntity(Ids.newId(), noteId, d.note.title, d.note.body, checklistJson, now(), reason, label.trim().take(80), blocksJson))
+        val name = label.trim().take(80)
+        if (name.isEmpty() && latest != null && latest.title == d.note.title && latest.body == d.note.body &&
+            latest.checklistJson == checklistJson && latest.blocksJson == blocksJson
+        ) return@withTransaction
+        revisions.insert(RevisionEntity(Ids.newId(), noteId, d.note.title, d.note.body, checklistJson, now(), reason, name, blocksJson))
         revisions.trim(noteId, MAX_REVISIONS)
     }
 
@@ -515,13 +567,22 @@ class NoteRepository(
         val d = notes.getNoteWithDetails(rev.noteId) ?: return
         val current = toDraft(uid, d) ?: throw VaultLockedException()
         val dec = decryptRevision(uid, rev) as? DecryptResult.Plain ?: throw VaultLockedException()
+        val layout = dec.blocks?.let { Blocks.reconcile(it, dec.body, dec.checklist, d.attachments.map { attachment -> attachment.id }) }
+        // A revision restored from a backup can reference row IDs that still belong to its source note.
+        val blockIds = (layout.orEmpty().map { it.id } + dec.checklist.mapNotNull { it.blockId })
+            .distinct().associateWith { Ids.newId() }
+        val restoredBlocks = layout?.map { it.copy(id = blockIds.getValue(it.id)) }
+        val restoredChecklist = dec.checklist.map { item ->
+            item.copy(id = Ids.newId(), blockId = blockIds[item.blockId ?: Blocks.DEFAULT_CHECKLIST])
+        }
         snapshot(rev.noteId, RevisionReason.BEFORE_RESTORE)
-        save(uid, current.copy(title = rev.title, body = dec.body, checklist = dec.checklist, updatedAt = null,
-            blocks = dec.blocks?.let { b -> Blocks.reconcile(b, dec.body, dec.checklist, d.attachments.map { it.id }) }))
+        save(uid, current.copy(title = rev.title, body = dec.body, checklist = restoredChecklist, updatedAt = null,
+            blocks = restoredBlocks))
     }
 
     // ---------------------------------------------------------------- templates
     suspend fun saveTemplate(uid: String, name: String, draft: NoteDraft) {
+        require(!draft.isLocked) { "Locked notes cannot be saved as templates" }
         templates.upsert(TemplateEntity(Ids.newId(), uid, name.take(60), draft.title, draft.body, draft.checklist.toJson(), now()))
     }
 

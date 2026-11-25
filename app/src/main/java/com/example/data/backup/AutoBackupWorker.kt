@@ -19,6 +19,7 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
         return try {
             c.backupManager.createSnapshot(uid); Result.success()
         } catch (e: Exception) {
+            com.example.core.Diagnostics.log(applicationContext, "backup", "Daily backup failed; will retry", e)
             Result.retry()
         }
     }

@@ -8,7 +8,8 @@ import java.util.Locale
 
 class Strings(val isArabic: Boolean) {
     private fun t(ar: String, en: String) = if (isArabic) ar else en
-    val locale: Locale = if (isArabic) Locale("ar") else Locale.ENGLISH
+    /** Arabic text with Latin digits (ar-u-nu-latn), per the owner's standard. */
+    val locale: Locale = if (isArabic) Locale.forLanguageTag("ar-u-nu-latn") else Locale.ENGLISH
 
     // App / auth
     val appName = "Notea"
@@ -93,7 +94,7 @@ class Strings(val isArabic: Boolean) {
     val results = { n: Int -> t("${num(n)} نتيجة", "$n results") }
     val lockedPreview = t("ملاحظة مقفلة", "Locked note")
     val untitled = t("بلا عنوان", "Untitled")
-    val selectedCount = { n: Int -> t("${num(n)} محددة", "$n selected") }
+    val selectedCount = { n: Int -> t("المحدد: ${notesCount(n)}", "$n selected") }
 
     // Note actions
     val pin = t("تثبيت", "Pin")
@@ -111,15 +112,24 @@ class Strings(val isArabic: Boolean) {
     val share = t("مشاركة كنص", "Share as text")
     val movedToTrash = t("نُقلت إلى المحذوفات", "Moved to trash")
     val undo = t("تراجع", "Undo")
+    val movedManyToTrash = { n: Int -> t("نُقلت ${notesCount(n)} إلى المحذوفات", "Moved $n notes to trash") }
     val redo = t("إعادة", "Redo")
     val archived = t("تمت الأرشفة", "Archived")
 
     // Editor
     val titleHint = t("العنوان", "Title")
     val bodyHint = t("اكتب ملاحظتك…", "Start writing…")
+    val readingMode = t("وضع القراءة", "Reading mode")
+    val editNote = t("تعديل الملاحظة", "Edit note")
+    val readingDirection = t("اتجاه القراءة", "Reading direction")
+    val directionAutomatic = t("اتجاه تلقائي", "Automatic direction")
+    val directionRtl = t("من اليمين إلى اليسار", "Right to left")
+    val directionLtr = t("من اليسار إلى اليمين", "Left to right")
     val checklist = t("قائمة مهام", "Checklist")
     val addItem = t("إضافة عنصر", "Add item")
     val itemHint = t("عنصر", "Item")
+    val checkedItem = t("عنصر منجز", "Completed item")
+    val uncheckedItem = t("عنصر غير منجز", "Incomplete item")
     val completedItems = { done: Int, all: Int -> t("${num(done)} من ${num(all)} منجزة", "$done of $all done") }
     val bold = t("عريض", "Bold")
     val italic = t("مائل", "Italic")
@@ -143,14 +153,19 @@ class Strings(val isArabic: Boolean) {
     val recording = t("جارٍ التسجيل", "Recording")
     val micPermission = t("يلزم إذن الميكروفون لتسجيل الملاحظات الصوتية.", "Microphone permission is needed to record voice notes.")
     val attachments = t("المرفقات", "Attachments")
-    val scanIncompleteTitle = t("لم يكتمل المسح", "Scan didn't finish")
-    val scanIncompleteBody = t("إذا ظهرت لك رسالة «حدث خطأ ما» من خدمات Google، فماسح Google غير متاح حالياً على هذا الهاتف. يمكنك التقاط صورة بالكاميرا بدلاً منه، وسيقرأ Notea النص منها على الجهاز.",
-        "If Google services showed “Something went wrong”, Google's scanner isn't available on this phone right now. You can take a photo with the camera instead; Notea will read the text on the device.")
     val useCamera = t("التقاط بالكاميرا", "Use the camera")
-    val scannerUsingCamera = t("ماسح Google غير جاهز على هذا الهاتف، فاستخدمنا الكاميرا مباشرة.", "Google's scanner isn't ready on this phone, so the camera is used instead.")
     val qrNotFound = t("لم نجد رمز QR في الصورة. قرّب الكاميرا من الرمز أو أدخل العنوان والرمز يدوياً.", "No QR code found in the photo. Move closer to the code, or enter the address and code manually.")
+    val crashTitle = t("أُغلق Notea بشكل غير متوقع", "Notea closed unexpectedly")
+    val crashBody = t("ملاحظاتك محفوظة. أرسل هذا التقرير للمطوّر ليعرف السبب ويصلحه (لا يحتوي على نص ملاحظاتك).", "Your notes are safe. Send this report to the developer so the cause can be fixed (it contains no note text).")
+    val shareReport = t("مشاركة التقرير", "Share report")
+    val ocrSetting = t("قراءة النص من الصور", "Read text from images")
+    val ocrSettingDesc = t("على الجهاز بالعربي والإنجليزي، ليصبح نص الصور قابلاً للبحث", "On the device, Arabic and English, so image text becomes searchable")
+    val ocrPausedDesc = t("أُوقفت تلقائياً لأن محرك القراءة توقف على هذا الهاتف. يمكنك إعادة تفعيلها.", "Paused automatically because the reading engine crashed on this phone. You can turn it back on.")
+    val explain = t("شرح", "Explain")
+    val saved = t("محفوظ ✓", "Saved ✓")
     val scanDocument = t("مسح مستند", "Scan document")
-    val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
+    val ocrTitle = t("النص المقروء من المرفق", "Text found in the attachment")
+    val ocrNoClearText = t("لم يُعثر على نص واضح في الصورة. للحصول على نتيجة أفضل: صوّر الورقة مستقيمة وقريبة وبإضاءة جيدة.", "No clear text found. For better results, photograph the page straight, close and well lit.")
     val ocrPending = t("جارٍ قراءة النص على الجهاز…", "Reading text on the device…")
     val copy = t("نسخ", "Copy")
     val copied = t("نُسخ النص", "Text copied")
@@ -160,7 +175,18 @@ class Strings(val isArabic: Boolean) {
     val removeBlock = t("إزالة", "Remove")
     val removeAttachment = t("إزالة المرفق", "Remove attachment")
     val openFile = t("فتح", "Open")
+    val openInAnotherApp = t("فتح في تطبيق آخر", "Open in another app")
     val noAppToOpen = t("لا يوجد تطبيق لفتح هذا الملف", "No app can open this file")
+    val attachmentUnavailable = t("تعذّر قراءة المرفق", "Could not read the attachment")
+    val attachmentAddFailed = { count: Int ->
+        if (count == 1) t("تعذّر إضافة المرفق", "Could not add the attachment")
+        else t("عدد المرفقات التي تعذّر إضافتها: ${num(count)}", "Could not add $count attachments")
+    }
+    val attachmentSaved = t("حُفظ المرفق", "Attachment saved")
+    val attachmentSaveFailed = t("تعذّر حفظ المرفق", "Could not save the attachment")
+    val previousPage = t("الصفحة السابقة", "Previous page")
+    val nextPage = t("الصفحة التالية", "Next page")
+    val pdfPage = { page: Int, count: Int -> t("الصفحة ${num(page)} من ${num(count)}", "Page $page of $count") }
     val addTags = t("الوسوم", "Tags")
     val tagHint = t("أضف وسماً واضغط إدخال", "Add a tag and press enter")
     val reminder = t("تذكير", "Reminder")
@@ -307,10 +333,11 @@ class Strings(val isArabic: Boolean) {
     val samsungNotes = "Samsung Notes"
     val xiaomiNotes = t("ملاحظات Xiaomi", "Xiaomi Notes")
     val huaweiNotepad = t("مفكرة Huawei", "Huawei Notepad")
-    val otherFiles = t("ملفات أخرى و Google Keep", "Other files & Google Keep")
+    val googleKeep = "Google Keep"
+    val otherFiles = t("ملفات أخرى", "Other files")
     val samsungSteps = t(
-        "في Samsung Notes: حدّد الملاحظات ← مشاركة ← اختر «ملف Microsoft Word» أو «PDF» أو «ملف نصي» أو «صورة» ← احفظها أو شاركها مباشرة مع Notea. الكتابة اليدوية تُحفظ كملف PDF/صورة أصلية.",
-        "In Samsung Notes: select notes → Share → choose Microsoft Word, PDF, Text or Image → save them or share directly to Notea. Handwriting is kept as the original PDF/image."
+        "اختر ملفات Samsung Notes بصيغة sdocx مباشرة (من «ملفاتي» أو نسخة Smart Switch)، فيستورد Notea النص والصور منها. للحفاظ على التنسيق أفضل: في Samsung Notes حدّد الملاحظات ← مشاركة ← «ملف Microsoft Word» أو «PDF» ← Notea. الكتابة اليدوية تُحفظ كصورة أو PDF.",
+        "Pick Samsung Notes files (sdocx) directly (from My Files or a Smart Switch copy); Notea imports their text and images. To keep formatting best: in Samsung Notes select notes → Share → Microsoft Word or PDF → Notea. Handwriting is kept as an image or PDF."
     )
     val xiaomiSteps = t(
         "في ملاحظات Xiaomi: افتح الملاحظة ← مشاركة ← «نص» ← Notea. يمكن مشاركة عدة ملاحظات أو ملفات TXT دفعة واحدة. إن لم يتوفر تصدير جماعي، استخدم «لصق نص» أدناه.",
@@ -321,8 +348,12 @@ class Strings(val isArabic: Boolean) {
         "In Huawei Notepad: select notes → Share/Export as TXT, HTML or image, or export a ZIP. Handwritten notes are imported as images or PDF, keeping available dates."
     )
     val otherSteps = t(
-        "يدعم: TXT و Markdown و HTML و DOCX و PDF و PNG/JPG و JSON و ZIP (ومنها تصدير Google Takeout لـ Keep).",
-        "Supports TXT, Markdown, HTML, DOCX, PDF, PNG/JPG, JSON and ZIP (including Google Takeout exports of Keep)."
+        "استورد ملفات TXT و Markdown و HTML و DOCX و PDF والصور و JSON و ZIP.",
+        "Import TXT, Markdown, HTML, DOCX, PDF, images, JSON and ZIP files."
+    )
+    val keepSteps = t(
+        "من Google Takeout، صدّر ملاحظات Keep ثم اختر ملف ZIP لاستيراد الملاحظات والقوائم والمرفقات معًا. إذا فككت الأرشيف، فاختر ملفات JSON ومرفقاتها معًا.",
+        "Export Keep from Google Takeout and choose the ZIP file to import notes, checklists and attachments together. If you unpack it, select the JSON files and their attachments together."
     )
     val chooseFiles = t("اختيار الملفات", "Choose files")
     val pasteText = t("لصق نص", "Paste text")
@@ -345,6 +376,7 @@ class Strings(val isArabic: Boolean) {
     val importDone = t("اكتمل الاستيراد", "Import complete")
     val importResult = { c: Int, m: Int, s: Int, a: Int -> t("أُضيفت ${num(c)} • دُمجت ${num(m)} • تُجوهلت ${num(s)} • مرفقات ${num(a)}", "Added $c • merged $m • skipped $s • attachments $a") }
     val failedItems = { n: Int -> t("تعذّر استيراد ${num(n)} عنصر", "$n items could not be imported") }
+    val importFailed = t("تعذّر إكمال الاستيراد.", "The import could not be completed.")
     val selectAll = t("تحديد الكل", "Select all")
     fun warning(w: ImportWarning) = when (w) {
         ImportWarning.FORMATTING_LOST -> t("بعض التنسيقات (جداول، رسوم، خطوط) لم تُنقل", "Some formatting (tables, drawings, fonts) was not converted")
@@ -353,7 +385,7 @@ class Strings(val isArabic: Boolean) {
         ImportWarning.UNSUPPORTED -> t("نوع ملف غير مدعوم، تم تخطيه", "Unsupported file type, skipped")
         ImportWarning.UNREADABLE -> t("ملف تالف أو غير قابل للقراءة", "File is damaged or unreadable")
         ImportWarning.LOCKED_CONTENT -> t("ملاحظة مقفلة: تحتاج عبارة مرور الخزنة الأصلية لفتحها", "Locked note: needs the original vault passphrase to open")
-        ImportWarning.TRUNCATED -> t("الأرشيف كبير جداً؛ تم تخطي جزء منه", "Archive too large; part of it was skipped")
+        ImportWarning.TRUNCATED -> t("تجاوز الملف حدود حجم الاستيراد أو عدد العناصر", "The file exceeded the import size or item limit")
         ImportWarning.IMAGE_KEPT_AS_FILE -> t("صيغة الصورة غير مدعومة على هذا الجهاز؛ حُفظ الملف الأصلي كمرفق", "This image format isn't supported on this device; the original file was kept")
     }
 
@@ -496,7 +528,219 @@ class Strings(val isArabic: Boolean) {
     // Widget
     val widgetName = t("ملاحظات Notea", "Notea notes")
 
-    fun num(n: Int): String = if (isArabic) java.text.NumberFormat.getInstance(locale).format(n) else n.toString()
+    /** Latin digits, bidi-isolated (U+2068…U+2069) inside Arabic text. */
+    fun num(n: Int): String = if (isArabic) "\u2068" + java.text.NumberFormat.getInstance(Locale.US).format(n) + "\u2069" else n.toString()
+
+    /** Arabic count forms: 0/1/2/3–10/11+ (e.g. ملاحظة واحدة، ملاحظتان، 3 ملاحظات، 11 ملاحظة). */
+    fun countAr(n: Int, one: String, two: String, few: String, many: String): String = when {
+        n == 0 -> "${num(0)} $many"
+        n == 1 -> one
+        n == 2 -> two
+        n % 100 in 3..10 -> "${num(n)} $few"
+        else -> "${num(n)} $many"
+    }
+    fun notesCount(n: Int) = if (isArabic) countAr(n, "ملاحظة واحدة", "ملاحظتان", "ملاحظات", "ملاحظة") else if (n == 1) "1 note" else "$n notes"
+    fun tasksCount(n: Int) = if (isArabic) countAr(n, "مهمة واحدة", "مهمتان", "مهام", "مهمة") else if (n == 1) "1 task" else "$n tasks"
+
+    val textSize = t("حجم الخط", "Text size")
+    val textSizeDesc = t("يطبَّق فوراً على كل الشاشات. الافتراضي: عادي", "Applies to every screen right away. Default: normal")
+    val textSmall = t("صغير", "Small")
+    val textDefault = t("عادي", "Normal")
+    val textLarge = t("كبير", "Large")
+    val textHuge = t("كبير جداً", "Extra large")
+    val restoreDefaults = t("استعادة الافتراضي", "Restore defaults")
+
+    // Tour / what's new / releases / diagnostics
+    val previous = t("السابق", "Back")
+    val startUsing = t("ابدأ", "Start")
+    val stepOf = { a: Int, b: Int -> t("الخطوة ${num(a)} من ${num(b)}", "Step $a of $b") }
+    val tour1Title = t("ملاحظاتك في مكان واحد", "All your notes in one place")
+    val tour1Body = t("اضغط زر + لملاحظة جديدة. يمكنك إضافة نص وقوائم وصور وملفات وتسجيلات في الملاحظة نفسها، ويُحفظ كل شيء تلقائياً.", "Tap + for a new note. Add text, checklists, images, files and recordings in the same note; everything saves automatically.")
+    val tour2Title = t("الضغط المطوّل يحدد", "Long press to select")
+    val tour2Body = t("اضغط مطوّلاً على ملاحظة لتحديدها، ثم اضغط غيرها لتحديد أكثر من واحدة وتثبيتها أو أرشفتها أو حذفها معاً. بعد الحذف يظهر زر «تراجع».", "Long press a note to select it, then tap others to pin, archive or delete them together. After deleting, an Undo button appears.")
+    val tour3Title = t("المهام والتذكيرات", "Tasks & reminders")
+    val tour3Body = t("كل عنصر غير منجز في قوائمك يظهر في تبويب المهام، مع التذكيرات القادمة. أنجز العنصر من هناك مباشرة.", "Every unchecked checklist item shows up in the Tasks tab, next to upcoming reminders. Complete items right there.")
+    val tour4Title = t("المجلدات والوسوم", "Folders & tags")
+    val tour4Body = t("نظّم ملاحظاتك في مجلدات، واكتب #وسم داخل أي ملاحظة. كل رقم في تبويب المجلدات يفتح ملاحظاته.", "Organize notes in folders, and type #tag inside any note. Every number in the Folders tab opens its notes.")
+    val tour5Title = t("خصوصيتك أولاً", "Your privacy first")
+    val tour5Body = t("اقفل أي ملاحظة لتُشفَّر على جهازك. ملاحظاتك تبقى على هاتفك ولا تُرسل لأي جهة إلا إذا طلبت ذلك صراحة.", "Lock any note to encrypt it on your device. Your notes stay on your phone and are never sent anywhere unless you explicitly ask.")
+    val tour6Title = t("المزيد", "More")
+    val tour6Body = t("من تبويب «المزيد»: نقل ملاحظاتك من هاتف آخر، والاستيراد، والنسخ الاحتياطي، والإعدادات، وإعادة هذه الجولة.", "From More: bring notes from another phone, import, backups, settings, and this tour again.")
+    val tour = t("الجولة التعريفية", "Tour")
+    val tourDesc = t("ست خطوات قصيرة عن أهم ما في التطبيق", "Six short steps through the essentials")
+    val whatsNewTitle = { v: String -> t("ما الجديد في الإصدار \u2066${v}\u2069", "What's new in $v") }
+    val allReleases = t("كل الإصدارات", "All releases")
+    val releases = t("الإصدارات", "Releases")
+    val releasesDesc = t("ما تغيّر في كل إصدار", "What changed in each version")
+    val versionLabelShort = { v: String -> t("الإصدار \u2066${v}\u2069", "Version $v") }
+    val currentVersion = t("الحالي", "current")
+    val diagnostics = t("سجل التشخيص", "Diagnostics log")
+    val diagnosticsDesc = t("آخر ${num(50)} حدثاً، تُخفى فيه البيانات الحساسة", "Last 50 events, sensitive data masked")
+    val diagnosticsIntro = t("يحفظ التطبيق هنا آخر ${num(50)} خطأ أو حدث في الخلفية على جهازك فقط. تُخفى البريد والمفاتيح والأرقام الطويلة والمسارات. انسخه وأرسله للمطوّر عند الإبلاغ عن مشكلة.",
+        "The app keeps the last 50 errors or background events here, on your device only. E-mails, keys, long numbers and paths are masked. Copy it and send it to the developer when reporting a problem.")
+    val diagnosticsEmpty = t("لا أحداث مسجّلة. كل شيء يعمل.", "Nothing logged. Everything is working.")
+    val copyAll = t("نسخ الكل", "Copy all")
+    val clearLog = t("مسح السجل", "Clear log")
+    val clearLogConfirm = t("سيُحذف السجل من هذا الجهاز.", "The log will be deleted from this device.")
+
+    // Updates
+    val updates = t("التحقق من التحديثات", "Check for updates")
+    val updatesDesc = t("من GitHub كل ${num(12)} ساعة، أو الآن يدوياً", "From GitHub every 12 hours, or manually now")
+    val installedVersion = { v: String -> t("الإصدار المثبّت: \u2066${v}\u2069", "Installed version: $v") }
+    val checkingUpdates = t("جارٍ التحقق من وجود إصدار أحدث…", "Checking for a newer version…")
+    val upToDate = t("لديك أحدث إصدار", "You have the latest version")
+    val lastChecked = { r: String -> t("آخر تحقق: ${r}", "Last checked: $r") }
+    val checkAgain = t("تحقق مجدداً", "Check again")
+    val updateAvailable = { v: String -> t("الإصدار \u2066${v}\u2069 متاح", "Version $v is available") }
+    val downloadSize = { b: Long -> t("حجم التنزيل: ${mb(b)}", "Download size: ${mb(b)}") }
+    val downloadUpdate = t("تنزيل التحديث", "Download update")
+    val downloading = { v: String -> t("جارٍ تنزيل الإصدار \u2066${v}\u2069…", "Downloading $v…") }
+    val progressPercent = { p: Int -> t("${num(p)}٪", "$p%") }
+    val updateVerified = t("نُزّل التحديث وتأكدنا من توقيعه", "Downloaded and signature verified")
+    val installHint = t("سيفتح Android شاشة التثبيت. ملاحظاتك تبقى كما هي.", "Android will open the installer. Your notes stay as they are.")
+    val installPermissionHint = t("يحتاج Android إذنك مرة واحدة ليسمح لـ Notea بتثبيت التحديثات. فعّل «السماح من هذا المصدر» ثم ارجع.", "Android needs your permission once to let Notea install updates. Turn on \"Allow from this source\", then come back.")
+    val installNow = t("تثبيت الآن", "Install now")
+    val allowAndInstall = t("منح الإذن ثم التثبيت", "Allow, then install")
+    val signatureMismatchTitle = t("التوقيع لا يطابق النسخة المثبّتة", "The signature doesn't match the installed app")
+    val signatureMismatchBody = t("الملف المنزّل موقّع بمفتاح مختلف عن نسختك الحالية، لذلك لم نثبّته حفاظاً على أمانك. يحدث هذا إن كانت نسختك من مصدر آخر. الحل: احفظ نسخة احتياطية من «المزيد ← النسخ الاحتياطي»، ثم احذف التطبيق وثبّت النسخة الرسمية من الرابط الثابت، ثم استعد النسخة.",
+        "The downloaded file is signed with a different key than your current app, so it was not installed for your safety. This happens when your copy came from another source. Fix: make a backup from More → Backup, uninstall, install the official build from the fixed link, then restore.")
+    val openFixedLink = t("فتح الرابط الثابت", "Open the fixed link")
+    val openReleasesPage = t("صفحة الإصدارات على GitHub", "Releases page on GitHub")
+    val updateAutoInfo = t("يتحقق Notea تلقائياً كل ${num(12)} ساعة عند الاتصال بالإنترنت ويُعلمك بإشعار. لا يُنزَّل أو يُثبَّت شيء دون ضغطك.", "Notea checks automatically every 12 hours when online and notifies you. Nothing is downloaded or installed without your tap.")
+    fun mb(bytes: Long): String = if (isArabic) "\u2068" + String.format(java.util.Locale.US, "%.1f", bytes / 1_048_576.0) + "\u2069 م.ب" else String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    fun updateError(r: com.example.core.update.Updater.Reason): Pair<String, String> = when (r) {
+        com.example.core.update.Updater.Reason.OFFLINE -> t("لا يوجد اتصال بالإنترنت", "No internet connection") to t("اتصل بشبكة Wi-Fi أو بيانات الجوال ثم اضغط «إعادة المحاولة».", "Connect to Wi-Fi or mobile data, then tap Retry.")
+        com.example.core.update.Updater.Reason.NO_RELEASE -> t("لا يوجد إصدار منشور بعد", "No published release yet") to t("لم يُنشر أي إصدار على GitHub حتى الآن، أو المستودع خاص. ستصلك رسالة عند نشر إصدار.", "Nothing has been published on GitHub yet, or the repository is private. You'll be notified when a release is out.")
+        com.example.core.update.Updater.Reason.NO_APK -> t("الإصدار لا يحتوي ملف تثبيت", "The release has no APK") to t("افتح صفحة الإصدارات ونزّل الملف يدوياً، أو حاول لاحقاً.", "Open the releases page and download it manually, or try later.")
+        com.example.core.update.Updater.Reason.SERVER -> t("تعذّر الوصول إلى GitHub", "Couldn't reach GitHub") to t("قد يكون الخادم مشغولاً. حاول بعد دقائق.", "The server may be busy. Try again in a few minutes.")
+        com.example.core.update.Updater.Reason.STORAGE -> t("المساحة غير كافية", "Not enough storage") to t("احذف بعض الملفات من الهاتف ثم أعد المحاولة.", "Free up some space on the phone, then retry.")
+        com.example.core.update.Updater.Reason.WRONG_PACKAGE -> t("الملف ليس تطبيق Notea", "The file isn't Notea") to t("لم يُثبَّت شيء. نزّل من صفحة الإصدارات الرسمية.", "Nothing was installed. Download from the official releases page.")
+        com.example.core.update.Updater.Reason.NOT_NEWER -> t("الملف ليس أحدث من نسختك", "The file isn't newer than your version") to t("لديك هذا الإصدار أو أحدث منه.", "You already have this version or newer.")
+        com.example.core.update.Updater.Reason.UNREADABLE -> t("الملف المنزّل تالف", "The downloaded file is damaged") to t("أعد التنزيل؛ قد يكون الاتصال انقطع.", "Download again; the connection may have dropped.")
+        com.example.core.update.Updater.Reason.DEBUG_BUILD -> t("هذه نسخة تجريبية", "This is a test build") to t("التحديث التلقائي متاح في النسخة الرسمية فقط، وليس في النسخ التجريبية.", "Automatic updates are only available in the official build, not in test builds.")
+    }
+
+    // Precise OCR (Gemini)
+    val preciseRead = t("قراءة دقيقة", "Precise reading")
+    val preciseReading = t("جارٍ القراءة الدقيقة…", "Reading precisely…")
+    val preciseDone = t("قُرئ النص بدقة", "Text read precisely")
+    val preciseHint = t("للمستندات الرسمية والجداول: فعّل «المساعد الذكي» من «المزيد» ليظهر زر «قراءة دقيقة».", "For official documents and tables: turn on the AI assistant in More to get «Precise reading».")
+    val consentImageBody = t("ستُرسل هذه الصورة فقط إلى Google Gemini بمفتاحك لقراءة نصها بدقة، ثم يُحفظ النص في ملاحظتك. لا يُرسل أي شيء آخر.", "Only this image is sent to Google Gemini with your key to read its text accurately; the text is then saved in your note. Nothing else is sent.")
+
+    // Scan chooser
+    val scanChooseTitle = t("كيف تريد مسح المستند؟", "How do you want to scan?")
+    val scanChooseBody = t("اختر طريقة التصوير، وسيقرأ Notea النص من الصورة تلقائياً. للمستندات الرسمية والجداول استخدم «قراءة دقيقة» بعد إضافة الصورة.", "Pick how to capture; Notea reads the text from the photo automatically. For official documents and tables, use «Precise reading» after adding the photo.")
+    val scanOptPhoneCamera = t("كاميرا الهاتف (وضع المستندات)", "Phone camera (document mode)")
+    val scanOptPhoneCameraDesc = t("في سامسونج وشاومي وهواوي: اختر وضع «مستند» وصوّر، ثم ارجع وستظهر الصورة لتختارها", "On Samsung, Xiaomi and Huawei: choose «Document» mode and shoot, then come back and pick the photo")
+    val scanOptQuick = t("التقاط سريع", "Quick photo")
+    val scanOptQuickDesc = t("صورة مباشرة بالكاميرا تُضاف إلى الملاحظة", "Take a photo that goes straight into the note")
+    val scanOptGallery = t("صورة من المعرض", "From the gallery")
+    val scanOptGalleryDesc = t("صورة ممسوحة مسبقاً أو لقطة شاشة", "An already scanned image or a screenshot")
+
+    // Notion-style
+    val insideNote = { t: String -> t("داخل: ${t.trim()}", "In: ${t.trim()}") }
+    val subNotes = t("الملاحظات الفرعية", "Sub-notes")
+    val noteNotFound = { n: String -> t("لا توجد ملاحظة باسم «${n}». أنشئها من «روابط في هذه الملاحظة».", "No note named “$n”. Create it from “Links in this note”.") }
+    val subNotesCount = { n: Int -> if (isArabic) countAr(n, "ملاحظة فرعية واحدة", "ملاحظتان فرعيتان", "ملاحظات فرعية", "ملاحظة فرعية") else if (n == 1) "1 sub-note" else "$n sub-notes" }
+    val newSubNote = t("ملاحظة فرعية", "Sub-note")
+    val linksFromNote = t("روابط في هذه الملاحظة", "Links in this note")
+    val backlinks = t("ملاحظات تشير إلى هذه", "Notes linking here")
+    val createNoteNamed = { n: String -> t("إنشاء «${n}»", "Create “$n”") }
+    val toggleBlock = t("كتلة قابلة للطي", "Toggle")
+    val calloutBlock = t("تنبيه", "Callout")
+    val toggleHint = t("عنوان الكتلة… (السطر الأول)", "Toggle heading… (first line)")
+    val calloutHint = t("اكتب معلومة مهمة…", "Write something important…")
+    val collapse = t("طي", "Collapse")
+    val expand = t("فتح", "Expand")
+    val linkToNote = t("رابط لملاحظة", "Link to note")
+    val insertBlock = t("إدراج", "Insert")
+    val noMatches = t("لا نتائج", "No matches")
+    val noteIcon = t("أيقونة الملاحظة", "Note icon")
+    val removeIcon = t("إزالة الأيقونة", "Remove icon")
+    val addIcon = t("إضافة أيقونة", "Add icon")
+    val moveUnderNote = t("نقل داخل ملاحظة", "Move into a note")
+    val moveToTop = t("إخراج إلى المستوى الأعلى", "Move to top level")
+    val pickParent = t("اختر الملاحظة الأم", "Choose the parent note")
+    val movedUnder = t("نُقلت الملاحظة", "Note moved")
+    val cantMoveUnder = t("لا يمكن نقل ملاحظة داخل إحدى ملاحظاتها الفرعية.", "A note can't go inside one of its own sub-notes.")
+    val slashHint = t("اكتب / في بداية السطر لقائمة الإدراج، و [[ لربط ملاحظة", "Type / at the start of a line for the insert menu, [[ to link a note")
+
+    // Assistant v1.4
+    val actAsk = t("اسأل عن هذه الملاحظة", "Ask about this note")
+    val actAskDesc = t("سؤال حر، والجواب من الملاحظة فقط", "Any question, answered from this note only")
+    val actTools = t("أدوات الكتابة", "Writing tools")
+    val actToolsDesc = t("تحسين، تصحيح، اختصار، إطالة، ترجمة، صياغة رسمية أو قانونية", "Improve, fix, shorten, expand, translate, formal or legal wording")
+    val actSuggest = t("اقتراح عنوان ووسوم ومجلد", "Suggest title, tags and folder")
+    val actSuggestDesc = t("تختار ما تقبله منها", "You choose what to accept")
+    val longNoteTools = t("التلخيص واستخراج المهام والخطة تظهر للملاحظات الأطول من ${num(280)} حرفاً.", "Summary, tasks and plan appear for notes longer than 280 characters.")
+    val writeSomethingFirst = t("اكتب نصاً أولاً، أو حدّد جزءاً منه.", "Write some text first, or select part of it.")
+    val toolsOnSelection = t("على النص المحدد:", "On the selected text:")
+    val toolsOnBlock = t("على الفقرة الحالية (حدّد نصاً لتعمل عليه فقط):", "On the current paragraph (select text to target only it):")
+    val rwImprove = t("تحسين الصياغة", "Improve writing")
+    val rwFix = t("تصحيح الإملاء والقواعد", "Fix spelling & grammar")
+    val rwShorten = t("اختصار", "Make shorter")
+    val rwExpand = t("إطالة وتوضيح", "Expand")
+    val rwTranslate = t("ترجمة (عربي ↔ إنجليزي)", "Translate (Arabic ↔ English)")
+    val rwFormal = t("صياغة رسمية", "Formal tone")
+    val rwLegal = t("صياغة قانونية", "Legal wording")
+    val rewriteResult = t("النتيجة", "Result")
+    val replaceSelection = t("استبدال المحدد", "Replace selection")
+    val replaceBlock = t("استبدال الفقرة", "Replace paragraph")
+    val insertBelow = t("إدراج تحتها", "Insert below")
+    val versionKept = t("تُحفظ نسخة من الملاحظة قبل أي تغيير، وتستعيدها من «سجل الإصدارات».", "A version is kept before any change; restore it from Version history.")
+    val askHint = t("مثال: ما المواعيد المذكورة؟ من الأشخاص المعنيون؟ ما الذي ينقص؟", "e.g. Which dates are mentioned? Who is involved? What is missing?")
+    val yourQuestion = t("سؤالك", "Your question")
+    val suggestedTitle = t("العنوان", "Title")
+    val suggestedFolder = t("المجلد", "Folder")
+    val apply = t("تطبيق", "Apply")
+    val consentText = { n: Int -> t("سيُرسل النص المحدد فقط (${num(n)} حرفاً) إلى Google Gemini بمفتاحك.", "Only the selected text ($n characters) is sent to Google Gemini with your key.") }
+    val transcribe = t("تفريغ النص", "Transcribe")
+    val transcribing = t("جارٍ تفريغ التسجيل…", "Transcribing…")
+    val transcribeDone = t("فُرّغ التسجيل", "Recording transcribed")
+    val transcriptTitle = t("نص التسجيل", "Transcript")
+    val consentAudioBody = t("سيُرسل هذا التسجيل فقط إلى Google Gemini بمفتاحك لتحويله إلى نص مع ملخص قصير، ثم يُحفظ النص مع التسجيل. الحد الأقصى نحو ${num(15)} دقيقة.", "Only this recording is sent to Google Gemini with your key to turn it into text with a short summary; the text is saved with the recording. Up to about 15 minutes.")
+    val transcribeHint = t("لتحويل التسجيل إلى نص: فعّل «المساعد الذكي» من «المزيد».", "To transcribe recordings: turn on the AI assistant in More.")
+    val askLibrary = t("اسأل ملاحظاتك", "Ask your notes")
+    val askLibraryDesc = t("سؤال عن كل ملاحظاتك؛ يُرسل أقرب ${num(5)} ملاحظات فقط", "A question about all your notes; only the 5 closest notes are sent")
+    val askLibraryIntro = t("يبحث Notea في ملاحظاتك على هاتفك أولاً، ثم يرسل أقرب ${num(5)} ملاحظات فقط (غير المقفلة) مع سؤالك إلى Gemini بمفتاحك. ترى أسماءها قبل الإرسال.", "Notea searches your notes on the phone first, then sends only the 5 closest (unlocked) notes with your question to Gemini using your key. You see their names before sending.")
+    val askLibraryHint = t("مثال: متى جلسة القضية 245؟ ما الذي اتفقنا عليه مع الموكل؟", "e.g. When is the next hearing? What did we agree with the client?")
+    val noMatchingNotes = t("لم أجد ملاحظات مرتبطة بالسؤال. جرّب كلمات من نص الملاحظة نفسها.", "No related notes found. Try words that appear in the note itself.")
+    val notesToSend = t("الملاحظات التي ستُرسل:", "Notes that will be sent:")
+    val sources = t("المصادر", "Sources")
+    val setUpAssistant = t("إعداد المساعد الذكي", "Set up the AI assistant")
+
+    // Main tabs
+    val tabNotes = t("الملاحظات", "Notes")
+    val tabTasks = t("المهام والتذكيرات", "Tasks & reminders")
+    val tabTasksShort = t("المهام", "Tasks")
+    val tabFolders = t("المجلدات والوسوم", "Folders & tags")
+    val tabFoldersShort = t("المجلدات", "Folders")
+    val tabMore = t("المزيد", "More")
+    val openTasks = t("مهام مفتوحة", "Open tasks")
+    val doneTasks = { n: Int -> t("أنجزت ${num(n)} من عناصر القوائم", "$n checklist items done") }
+    val tasksInfo = t("تُجمع هنا عناصر القوائم غير المنجزة من كل ملاحظاتك. الملاحظات المقفلة لا تظهر هنا حفاظاً على خصوصيتها. اضغط المربع لإنجاز العنصر، أو النص لفتح ملاحظته.",
+        "Unchecked checklist items from all your notes are gathered here. Locked notes are excluded to keep them private. Tap the box to complete an item, or the text to open its note.")
+    val upcomingReminders = t("التذكيرات القادمة", "Upcoming reminders")
+    val noTasksTitle = t("لا مهام مفتوحة", "No open tasks")
+    val noTasksBody = t("أضف قائمة مهام داخل أي ملاحظة لتظهر هنا.", "Add a checklist to any note and it shows up here.")
+    val noReminders = t("لا تذكيرات قادمة", "No upcoming reminders")
+    val overdue = t("فات موعده", "Overdue")
+    val countsInfo = t("الرقم بجانب كل عنصر هو عدد الملاحظات فيه (دون المحذوفات). اضغط العنصر لعرض ملاحظاته.",
+        "The number next to each item is how many notes it holds (excluding trash). Tap an item to see its notes.")
+    val noTags = t("لا وسوم بعد. اكتب #وسم داخل أي ملاحظة لإنشائه.", "No tags yet. Type #tag inside any note to create one.")
+    val noFolders = t("لا مجلدات بعد", "No folders yet")
+    val renameTag = t("إعادة تسمية الوسم", "Rename tag")
+    val tagName = t("اسم الوسم", "Tag name")
+    val deleteFolder = t("حذف المجلد", "Delete folder")
+    val deleteFolderConfirm = t("سيُحذف المجلد فقط، وتبقى ملاحظاته في «بدون مجلد».", "Only the folder is removed; its notes move to \"No folder\".")
+    val moreData = t("البيانات والنقل", "Data & transfer")
+    val moreApp = t("التطبيق", "App")
+    val backupTitle = t("النسخ الاحتياطي", "Backup")
+    val backupDesc = t("نسخة مشفّرة بصيغة notea تستعيدها متى شئت", "An encrypted notea backup you can restore anytime")
+    val transferDesc = t("انقل كل ملاحظاتك إلى هاتف جديد عبر Wi-Fi", "Move all your notes to a new phone over Wi-Fi")
+    val settingsDesc = t("المظهر، الخط، القفل، المزامنة", "Appearance, text size, lock, sync")
+    val aboutDesc = t("المطوّر، الترخيص، الإصدار", "Developer, license, version")
+    val goNotes = t("العودة إلى الملاحظات", "Back to notes")
 
     fun date(millis: Long, withTime: Boolean = true): String {
         val f = if (withTime) DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
