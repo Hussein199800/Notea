@@ -17,15 +17,19 @@ class OcrEngine(private val context: Context) {
     private val dataDir: File get() = File(context.filesDir, "tesseract")
 
     /** Copies the bundled (compressed) models once per model version (Tesseract needs real files). */
-    private fun ensureModels() {
+    private fun ensureModels() = synchronized(modelLock) {
         val dir = File(dataDir, "tessdata").apply { mkdirs() }
         val marker = File(dir, "models.version")
-        if (marker.exists() && marker.readText() == MODEL_VERSION && LANGS.all { File(dir, "$it.traineddata").length() > 0 }) return
+        if (marker.exists() && marker.readText() == MODEL_VERSION && LANGS.all { File(dir, "$it.traineddata").length() > 0 }) return@synchronized
         for (lang in LANGS) {
             val f = File(dir, "$lang.traineddata")
             val tmp = File(dir, "$lang.tmp")
-            context.assets.open("tessdata/$lang.traineddata").use { i -> tmp.outputStream().use { i.copyTo(it) } }
-            if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+            try {
+                context.assets.open("tessdata/$lang.traineddata").use { i -> tmp.outputStream().use { i.copyTo(it) } }
+                if (!tmp.renameTo(f)) throw java.io.IOException("Could not install OCR model $lang")
+            } finally {
+                tmp.delete()
+            }
         }
         marker.writeText(MODEL_VERSION)
     }
@@ -83,14 +87,24 @@ class OcrEngine(private val context: Context) {
     /** Renders and OCRs up to [maxPages] pages of a PDF (scans and printed PDFs). */
     fun recognizePdf(file: File, maxPages: Int = 25): String {
         val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        return PdfRenderer(pfd).use { r ->
+        val renderer = try {
+            PdfRenderer(pfd)
+        } catch (e: Exception) {
+            pfd.close()
+            throw e
+        }
+        return renderer.use { r ->
             (0 until minOf(r.pageCount, maxPages)).joinToString("\n\n") { i ->
                 r.openPage(i).use { page ->
                     val scale = 2000f / maxOf(page.width, page.height)
                     val bmp = Bitmap.createBitmap((page.width * scale).toInt().coerceAtLeast(1), (page.height * scale).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-                    bmp.eraseColor(Color.WHITE)
-                    page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    try { recognize(bmp) } finally { bmp.recycle() }
+                    try {
+                        bmp.eraseColor(Color.WHITE)
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        recognize(bmp)
+                    } finally {
+                        bmp.recycle()
+                    }
                 }
             }.trim()
         }
@@ -106,6 +120,7 @@ class OcrEngine(private val context: Context) {
     }
 
     companion object {
+        private val modelLock = Any()
         val LANGS = listOf("ara", "eng")
         /** Bump when the bundled models change. */
         const val MODEL_VERSION = "ara-best+eng-fast-2"

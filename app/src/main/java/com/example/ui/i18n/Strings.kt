@@ -119,9 +119,17 @@ class Strings(val isArabic: Boolean) {
     // Editor
     val titleHint = t("العنوان", "Title")
     val bodyHint = t("اكتب ملاحظتك…", "Start writing…")
+    val readingMode = t("وضع القراءة", "Reading mode")
+    val editNote = t("تعديل الملاحظة", "Edit note")
+    val readingDirection = t("اتجاه القراءة", "Reading direction")
+    val directionAutomatic = t("اتجاه تلقائي", "Automatic direction")
+    val directionRtl = t("من اليمين إلى اليسار", "Right to left")
+    val directionLtr = t("من اليسار إلى اليمين", "Left to right")
     val checklist = t("قائمة مهام", "Checklist")
     val addItem = t("إضافة عنصر", "Add item")
     val itemHint = t("عنصر", "Item")
+    val checkedItem = t("عنصر منجز", "Completed item")
+    val uncheckedItem = t("عنصر غير منجز", "Incomplete item")
     val completedItems = { done: Int, all: Int -> t("${num(done)} من ${num(all)} منجزة", "$done of $all done") }
     val bold = t("عريض", "Bold")
     val italic = t("مائل", "Italic")
@@ -160,7 +168,7 @@ class Strings(val isArabic: Boolean) {
     val explain = t("شرح", "Explain")
     val saved = t("محفوظ ✓", "Saved ✓")
     val scanDocument = t("مسح مستند", "Scan document")
-    val ocrTitle = t("النص المقروء من الصورة", "Text found in the image")
+    val ocrTitle = t("النص المقروء من المرفق", "Text found in the attachment")
     val ocrNoClearText = t("لم يُعثر على نص واضح في الصورة. للحصول على نتيجة أفضل: صوّر الورقة مستقيمة وقريبة وبإضاءة جيدة.", "No clear text found. For better results, photograph the page straight, close and well lit.")
     val ocrPending = t("جارٍ قراءة النص على الجهاز…", "Reading text on the device…")
     val copy = t("نسخ", "Copy")
@@ -171,7 +179,18 @@ class Strings(val isArabic: Boolean) {
     val removeBlock = t("إزالة", "Remove")
     val removeAttachment = t("إزالة المرفق", "Remove attachment")
     val openFile = t("فتح", "Open")
+    val openInAnotherApp = t("فتح في تطبيق آخر", "Open in another app")
     val noAppToOpen = t("لا يوجد تطبيق لفتح هذا الملف", "No app can open this file")
+    val attachmentUnavailable = t("تعذّر قراءة المرفق", "Could not read the attachment")
+    val attachmentAddFailed = { count: Int ->
+        if (count == 1) t("تعذّر إضافة المرفق", "Could not add the attachment")
+        else t("عدد المرفقات التي تعذّر إضافتها: ${num(count)}", "Could not add $count attachments")
+    }
+    val attachmentSaved = t("حُفظ المرفق", "Attachment saved")
+    val attachmentSaveFailed = t("تعذّر حفظ المرفق", "Could not save the attachment")
+    val previousPage = t("الصفحة السابقة", "Previous page")
+    val nextPage = t("الصفحة التالية", "Next page")
+    val pdfPage = { page: Int, count: Int -> t("الصفحة ${num(page)} من ${num(count)}", "Page $page of $count") }
     val addTags = t("الوسوم", "Tags")
     val tagHint = t("أضف وسماً واضغط إدخال", "Add a tag and press enter")
     val reminder = t("تذكير", "Reminder")
@@ -318,7 +337,8 @@ class Strings(val isArabic: Boolean) {
     val samsungNotes = "Samsung Notes"
     val xiaomiNotes = t("ملاحظات Xiaomi", "Xiaomi Notes")
     val huaweiNotepad = t("مفكرة Huawei", "Huawei Notepad")
-    val otherFiles = t("ملفات أخرى و Google Keep", "Other files & Google Keep")
+    val googleKeep = "Google Keep"
+    val otherFiles = t("ملفات أخرى", "Other files")
     val samsungSteps = t(
         "اختر ملفات Samsung Notes بصيغة sdocx مباشرة (من «ملفاتي» أو نسخة Smart Switch)، فيستورد Notea النص والصور منها. للحفاظ على التنسيق أفضل: في Samsung Notes حدّد الملاحظات ← مشاركة ← «ملف Microsoft Word» أو «PDF» ← Notea. الكتابة اليدوية تُحفظ كصورة أو PDF.",
         "Pick Samsung Notes files (sdocx) directly (from My Files or a Smart Switch copy); Notea imports their text and images. To keep formatting best: in Samsung Notes select notes → Share → Microsoft Word or PDF → Notea. Handwriting is kept as an image or PDF."
@@ -332,8 +352,12 @@ class Strings(val isArabic: Boolean) {
         "In Huawei Notepad: select notes → Share/Export as TXT, HTML or image, or export a ZIP. Handwritten notes are imported as images or PDF, keeping available dates."
     )
     val otherSteps = t(
-        "يدعم: TXT و Markdown و HTML و DOCX و PDF و PNG/JPG و JSON و ZIP (ومنها تصدير Google Takeout لـ Keep).",
-        "Supports TXT, Markdown, HTML, DOCX, PDF, PNG/JPG, JSON and ZIP (including Google Takeout exports of Keep)."
+        "استورد ملفات TXT و Markdown و HTML و DOCX و PDF والصور و JSON و ZIP.",
+        "Import TXT, Markdown, HTML, DOCX, PDF, images, JSON and ZIP files."
+    )
+    val keepSteps = t(
+        "من Google Takeout، صدّر ملاحظات Keep ثم اختر ملف ZIP لاستيراد الملاحظات والقوائم والمرفقات معًا. إذا فككت الأرشيف، فاختر ملفات JSON ومرفقاتها معًا.",
+        "Export Keep from Google Takeout and choose the ZIP file to import notes, checklists and attachments together. If you unpack it, select the JSON files and their attachments together."
     )
     val chooseFiles = t("اختيار الملفات", "Choose files")
     val pasteText = t("لصق نص", "Paste text")
@@ -356,6 +380,7 @@ class Strings(val isArabic: Boolean) {
     val importDone = t("اكتمل الاستيراد", "Import complete")
     val importResult = { c: Int, m: Int, s: Int, a: Int -> t("أُضيفت ${num(c)} • دُمجت ${num(m)} • تُجوهلت ${num(s)} • مرفقات ${num(a)}", "Added $c • merged $m • skipped $s • attachments $a") }
     val failedItems = { n: Int -> t("تعذّر استيراد ${num(n)} عنصر", "$n items could not be imported") }
+    val importFailed = t("تعذّر إكمال الاستيراد.", "The import could not be completed.")
     val selectAll = t("تحديد الكل", "Select all")
     fun warning(w: ImportWarning) = when (w) {
         ImportWarning.FORMATTING_LOST -> t("بعض التنسيقات (جداول، رسوم، خطوط) لم تُنقل", "Some formatting (tables, drawings, fonts) was not converted")
@@ -364,7 +389,7 @@ class Strings(val isArabic: Boolean) {
         ImportWarning.UNSUPPORTED -> t("نوع ملف غير مدعوم، تم تخطيه", "Unsupported file type, skipped")
         ImportWarning.UNREADABLE -> t("ملف تالف أو غير قابل للقراءة", "File is damaged or unreadable")
         ImportWarning.LOCKED_CONTENT -> t("ملاحظة مقفلة: تحتاج عبارة مرور الخزنة الأصلية لفتحها", "Locked note: needs the original vault passphrase to open")
-        ImportWarning.TRUNCATED -> t("الأرشيف كبير جداً؛ تم تخطي جزء منه", "Archive too large; part of it was skipped")
+        ImportWarning.TRUNCATED -> t("تجاوز الملف حدود حجم الاستيراد أو عدد العناصر", "The file exceeded the import size or item limit")
         ImportWarning.IMAGE_KEPT_AS_FILE -> t("صيغة الصورة غير مدعومة على هذا الجهاز؛ حُفظ الملف الأصلي كمرفق", "This image format isn't supported on this device; the original file was kept")
     }
 

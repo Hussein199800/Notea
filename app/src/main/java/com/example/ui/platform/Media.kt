@@ -24,7 +24,9 @@ class AudioRecorder(private val context: Context) {
 
     fun start(): Boolean = try {
         val f = File(context.cacheDir, "rec_${System.currentTimeMillis()}.m4a")
+        file = f
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
+        recorder = r
         r.setAudioSource(MediaRecorder.AudioSource.MIC)
         r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -32,7 +34,7 @@ class AudioRecorder(private val context: Context) {
         r.setAudioSamplingRate(44_100)
         r.setOutputFile(f.absolutePath)
         r.prepare(); r.start()
-        recorder = r; file = f; startedAt = System.currentTimeMillis()
+        startedAt = System.currentTimeMillis()
         true
     } catch (e: Exception) {
         cancel(); false
@@ -44,11 +46,18 @@ class AudioRecorder(private val context: Context) {
         val f = file
         val duration = System.currentTimeMillis() - startedAt
         recorder = null
+        file = null
         return try {
-            r.stop(); r.release()
-            if (f != null && f.length() > 0) f to duration else null
-        } catch (e: Exception) {
-            r.release(); f?.delete(); null
+            r.stop()
+            if (f != null && f.length() > 0) f to duration else {
+                f?.delete()
+                null
+            }
+        } catch (_: Exception) {
+            f?.delete()
+            null
+        } finally {
+            runCatching { r.release() }
         }
     }
 
@@ -61,37 +70,70 @@ class AudioRecorder(private val context: Context) {
 /** Single shared player for voice notes. */
 object AudioPlayer {
     private var player: MediaPlayer? = null
+    private var onStateChange: ((Boolean) -> Unit)? = null
     var playingPath: String? = null
         private set
 
-    fun toggle(file: File, onStateChange: (Boolean) -> Unit) {
-        if (playingPath == file.path) { stop(); onStateChange(false); return }
+    fun toggle(file: File, onStateChange: (Boolean) -> Unit, onError: () -> Unit) {
+        if (playingPath == file.path) {
+            stop()
+            return
+        }
         stop()
         try {
-            player = MediaPlayer().apply {
-                setDataSource(file.path)
-                setOnCompletionListener { stop(); onStateChange(false) }
-                prepare(); start()
-            }
+            val playback = MediaPlayer()
+            player = playback
+            this.onStateChange = onStateChange
             playingPath = file.path
+            playback.apply {
+                setDataSource(file.path)
+                setOnPreparedListener { if (player === it) it.start() }
+                setOnCompletionListener { if (player === it) stop() }
+                setOnErrorListener { source, _, _ ->
+                    if (player === source) {
+                        stop()
+                        onError()
+                    }
+                    true
+                }
+                prepareAsync()
+            }
             onStateChange(true)
         } catch (_: Exception) {
-            stop(); onStateChange(false)
+            stop()
+            onError()
         }
     }
 
+    fun stopIfPlaying(path: String?) {
+        if (path != null && playingPath == path) stop()
+    }
+
     fun stop() {
-        try { player?.stop() } catch (_: Exception) {}
-        player?.release(); player = null; playingPath = null
+        val oldPlayer = player
+        val callback = onStateChange
+        player = null
+        onStateChange = null
+        playingPath = null
+        oldPlayer?.release()
+        callback?.invoke(false)
     }
 }
 
 object FileOpener {
-    fun open(context: Context, file: File, mime: String): Boolean {
-        val uri = runCatching { FileProvider.getUriForFile(context, context.packageName + ".files", file) }.getOrNull() ?: return false
-        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime.ifBlank { "*/*" })
+    fun open(context: Context, file: File, mime: String, displayName: String): Boolean = try {
+        val name = displayName.substringAfterLast('/').substringAfterLast('\\').ifBlank { file.name }
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file, name)
+        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime.ifBlank { "application/octet-stream" })
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        return try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }
+        context.startActivity(intent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    } catch (_: SecurityException) {
+        false
+    } catch (_: IllegalArgumentException) {
+        false
     }
 
     fun openUrl(context: Context, url: String): Boolean = try {

@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import com.example.data.local.BlockType
 import com.example.data.local.ChecklistItemEntity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -55,9 +56,30 @@ object Blocks {
         blocks.filter { it.type in com.example.data.local.BlockType.TEXTUAL }.joinToString(SEPARATOR) { it.text }
 
     fun defaultLayout(body: String, checklist: List<ChecklistDraft>, attachmentIds: List<String>): List<BlockDraft> = buildList {
-        add(BlockDraft(type = com.example.data.local.BlockType.TEXT, text = body))
-        if (checklist.isNotEmpty()) add(BlockDraft(id = DEFAULT_CHECKLIST, type = com.example.data.local.BlockType.CHECKLIST))
-        attachmentIds.forEach { add(BlockDraft(type = com.example.data.local.BlockType.ATTACHMENT, attachmentId = it)) }
+        add(BlockDraft(type = BlockType.TEXT, text = body))
+        checklist.map { it.blockId ?: DEFAULT_CHECKLIST }.distinct().forEach { id ->
+            add(BlockDraft(id = id, type = BlockType.CHECKLIST))
+        }
+        attachmentIds.forEach { add(BlockDraft(type = BlockType.ATTACHMENT, attachmentId = it)) }
+    }
+
+    /** The classic checklist ID is shared in memory, but stored block IDs are globally unique. */
+    internal fun scopeDefaultChecklist(
+        noteId: String,
+        blocks: List<BlockDraft>?,
+        checklist: List<ChecklistDraft>
+    ): Pair<List<BlockDraft>?, List<ChecklistDraft>> {
+        val id = "$DEFAULT_CHECKLIST-$noteId"
+        if (blocks == null || blocks.none { it.type == BlockType.CHECKLIST && (it.id == DEFAULT_CHECKLIST || it.id == id) }) {
+            return blocks to checklist
+        }
+        val layout = blocks.map { block ->
+            if (block.type == BlockType.CHECKLIST && block.id == DEFAULT_CHECKLIST) block.copy(id = id) else block
+        }
+        val items = checklist.map { item ->
+            if (item.blockId == null || item.blockId == DEFAULT_CHECKLIST) item.copy(blockId = id) else item
+        }
+        return layout to items
     }
 
     /**

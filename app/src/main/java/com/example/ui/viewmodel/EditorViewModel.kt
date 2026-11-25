@@ -6,11 +6,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.AppContainer
+import com.example.core.media.ImageNormalizer
 import com.example.core.security.CryptoException
 import com.example.data.local.AttachmentEntity
 import com.example.data.local.AttachmentKind
 import com.example.data.local.RevisionEntity
 import com.example.data.local.BlockType
+import com.example.data.repository.AttachmentStore
 import com.example.data.repository.BlockDraft
 import com.example.data.repository.Blocks
 import com.example.data.repository.ChecklistDraft
@@ -19,6 +21,7 @@ import com.example.data.repository.DecryptResult
 import com.example.data.repository.NoteDraft
 import com.example.data.repository.VaultLockedException
 import com.example.ui.editor.EditHistory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,11 +36,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 
 /** One piece of a note's content, in display order. */
 sealed interface EditorBlock {
@@ -127,6 +133,8 @@ data class RewriteTarget(val blockId: String, val start: Int, val end: Int, val 
 sealed interface EditorEvent {
     data object EncryptionFailed : EditorEvent
     data object VaultRequired : EditorEvent
+    data class AttachmentFailed(val count: Int) : EditorEvent
+    /** Plain message (assistant results, AI errors). */
     data class Message(val text: String) : EditorEvent
 }
 
@@ -320,7 +328,7 @@ class EditorViewModel(
 
     /** Applies assistant output; the previous state is kept as a version first. */
     private fun withAssistantSnapshot(change: (EditorState) -> EditorState) = viewModelScope.launch(Dispatchers.IO) {
-        saveNow(force = true)
+        if (!saveNow(force = true)) return@launch
         repo.snapshot(noteId, com.example.data.local.RevisionReason.ASSISTANT)
         withContext(Dispatchers.Main) { edit(coalesce = false, change = change) }
         _assistant.value = AssistantUi.Idle
@@ -351,6 +359,8 @@ class EditorViewModel(
     private var history = EditHistory(EditorContent("", emptyList(), emptyList()))
     private var saveJob: Job? = null
     private val saveMutex = Mutex()
+    // Accessed with saveMutex. Only this editor's temporary empty row is eligible for cleanup.
+    private var emptyPlaceholder = false
     private var lastSnapshotAt = 0L
 
     init {
@@ -445,11 +455,13 @@ class EditorViewModel(
      * can be placed anywhere in the note. Without focus it goes to the end.
      */
     private fun insertAtCursor(s: EditorState, block: EditorBlock): EditorState {
-        val target = s.focusedText
+        val target = s.blocks.firstOrNull { it.id == s.focusedBlockId } as? EditorBlock.Text
         val list = s.blocks.toMutableList()
         if (target == null) {
-            list += block; list += EditorBlock.Text(Ids.newId(), TextFieldValue(""))
-            return s.copy(blocks = list)
+            val trailing = EditorBlock.Text(Ids.newId(), TextFieldValue(""))
+            list += block
+            list += trailing
+            return s.copy(blocks = list, focusedBlockId = trailing.id)
         }
         val idx = list.indexOfFirst { it.id == target.id }
         if (target.kind != BlockType.TEXT) {
@@ -651,7 +663,10 @@ class EditorViewModel(
     fun toggleFavorite() = edit(content = false) { it.copy(isFavorite = !it.isFavorite) }
     fun setFolder(id: String?) = edit(content = false) { it.copy(folderId = id) }
     fun setTags(t: List<String>) = edit(content = false) { it.copy(tags = t.distinct()) }
-    fun toggleArchive(onDone: () -> Unit) { edit(content = false) { it.copy(isArchived = !it.isArchived, isPinned = false) }; flush(onDone) }
+    fun toggleArchive(onDone: () -> Unit) {
+        edit(content = false) { it.copy(isArchived = !it.isArchived, isPinned = false) }
+        flush(onDone = onDone)
+    }
 
     fun lock(pinHash: String, hint: String) {
         if (!repo.vaultReady(uid)) { _events.tryEmit(EditorEvent.VaultRequired); return }
@@ -662,7 +677,7 @@ class EditorViewModel(
     fun unlockPermanently() = edit(content = false) { it.copy(isLocked = false, lockPinHash = "", lockHint = "") }
 
     fun moveToTrash(onDone: () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
-        saveNow()
+        if (!saveNow() && _state.value.persisted) return@launch
         if (_state.value.persisted) repo.moveToTrash(uid, noteId)
         withContext(Dispatchers.Main) { onDone() }
     }
@@ -673,80 +688,166 @@ class EditorViewModel(
     }
 
     fun setReminder(at: Long?) = viewModelScope.launch(Dispatchers.IO) {
-        ensurePersisted()
-        repo.setReminder(uid, noteId, at)
-        _state.value = _state.value.copy(reminderAt = at)
+        if (!ensurePersisted()) return@launch
+        saveMutex.withLock {
+            repo.setReminder(uid, noteId, at)
+            if (at != null) emptyPlaceholder = false
+            _state.update { it.copy(reminderAt = at) }
+        }
     }
 
     // ------------------------------------------------------------------ attachments
-    fun addAttachmentFromUri(uri: Uri, kindHint: String? = null) = viewModelScope.launch(Dispatchers.IO) {
-        try {
-            _state.value = _state.value.copy(busy = true)
-            ensurePersisted()
-            val info = repo.attachments.describe(uri)
-            // Copy to a temp file first so images can be normalized (HEIC/AVIF/TIFF -> JPEG/PNG).
-            val tmp = File(container.app.cacheDir, "attach_" + System.nanoTime())
-            container.app.contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return@launch
-            var name = info.name; var mime = info.mime; var file = tmp
-            val wantsImage = kindHint == AttachmentKind.IMAGE || com.example.core.media.ImageNormalizer.isImageName(info.name, info.mime)
-            var isImage = false
-            if (wantsImage) {
-                val p = com.example.core.media.ImageNormalizer.prepare(tmp, info.name, info.mime)
-                name = p.name; mime = p.mime; file = p.file; isImage = p.isImage
+    private val attachmentMutex = Mutex()
+
+    fun addAttachmentsFromUris(uris: List<Uri>, imageHint: Boolean = false) = viewModelScope.launch {
+        if (uris.isEmpty()) return@launch
+        updatingAttachments {
+            var failures = 0
+            for (uri in uris) {
+                try {
+                    val added = withContext(Dispatchers.IO) { storeUriAttachment(uri, imageHint) }
+                    addAttachmentToEditor(added.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: VaultLockedException) {
+                    throw e
+                } catch (_: Exception) {
+                    failures++
+                }
+            }
+            if (failures > 0) _events.emit(EditorEvent.AttachmentFailed(failures))
+        }
+    }
+
+    private suspend fun storeUriAttachment(uri: Uri, imageHint: Boolean): AttachmentEntity {
+        val info = repo.attachments.describe(uri)
+        val source = container.app.contentResolver.openInputStream(uri) ?: throw IOException("Could not open attachment")
+        source.buffered().use { input ->
+            input.mark(64)
+            val header = ByteArray(64)
+            var count = 0
+            while (count < header.size) {
+                val bytesRead = input.read(header, count, header.size - count)
+                if (bytesRead <= 0) break
+                count += bytesRead
+            }
+            input.reset()
+            val head = header.copyOf(count)
+            if (count >= 5 && String(head, 0, 5, Charsets.US_ASCII) == "%PDF-") {
+                return storeAttachment(AttachmentKind.PDF, info.name, "application/pdf", input)
+            }
+            val image = ImageNormalizer.detect(head, info.name, info.mime) != ImageNormalizer.Format.UNKNOWN
+            if (image || imageHint || ImageNormalizer.isImageName(info.name, info.mime)) {
+                val dir = File(container.app.cacheDir, "attachment-imports").apply { mkdirs() }
+                val tmp = File.createTempFile("attachment-", ".tmp", dir)
+                try {
+                    tmp.outputStream().use { input.copyTo(it) }
+                    val prepared = ImageNormalizer.prepare(tmp, info.name, info.mime)
+                    val kind = if (prepared.isImage) AttachmentKind.IMAGE else AttachmentKind.FILE
+                    return prepared.file.inputStream().use { storeAttachment(kind, prepared.name, prepared.mime, it) }
+                } finally {
+                    tmp.delete()
+                    File(dir, tmp.name + ".png").delete()
+                    File(dir, tmp.name + ".jpg").delete()
+                }
             }
             val kind = when {
-                isImage -> AttachmentKind.IMAGE
-                mime == "application/pdf" -> AttachmentKind.PDF
-                mime.startsWith("audio/") -> AttachmentKind.AUDIO
+                info.mime == "application/pdf" -> AttachmentKind.PDF
+                info.mime.startsWith("audio/") -> AttachmentKind.AUDIO
                 else -> AttachmentKind.FILE
             }
-            val added = repo.addAttachment(uid, noteId, kind, name, mime, file.inputStream())
-            tmp.delete(); if (file != tmp) file.delete()
-            refreshAttachments()
-            insertAttachmentBlock(added.id)
-        } catch (e: VaultLockedException) {
-            _events.tryEmit(EditorEvent.VaultRequired)
-        } catch (e: Exception) {
-            _events.tryEmit(EditorEvent.Message(e.message ?: "error"))
-        } finally {
-            _state.value = _state.value.copy(busy = false)
+            return storeAttachment(kind, info.name, info.mime, input)
         }
     }
 
-    fun addAudio(file: File, durationMs: Long, name: String) = viewModelScope.launch(Dispatchers.IO) {
+    private suspend fun storeAttachment(
+        kind: String, name: String, mime: String, input: InputStream?, durationMs: Long = 0L,
+        url: String = "", title: String = "", description: String = ""
+    ): AttachmentEntity = saveMutex.withLock {
+        repo.addAttachment(uid, noteId, kind, name, mime, input, durationMs = durationMs,
+            url = url, linkTitle = title, linkDescription = description).also { emptyPlaceholder = false }
+    }
+
+    fun addAudio(file: File, durationMs: Long, name: String) = viewModelScope.launch {
         try {
-            ensurePersisted()
-            val added = repo.addAttachment(uid, noteId, AttachmentKind.AUDIO, name, "audio/mp4", file.inputStream(), durationMs = durationMs)
+            updatingAttachments {
+                val added = withContext(Dispatchers.IO) {
+                    file.inputStream().use { storeAttachment(AttachmentKind.AUDIO, name, "audio/mp4", it, durationMs) }
+                }
+                addAttachmentToEditor(added.id)
+            }
+        } finally {
             file.delete()
-            refreshAttachments()
-            insertAttachmentBlock(added.id)
-        } catch (e: VaultLockedException) {
-            _events.tryEmit(EditorEvent.VaultRequired)
         }
     }
 
-    fun addLinkCard(url: String, title: String, description: String) = viewModelScope.launch(Dispatchers.IO) {
-        ensurePersisted()
-        val added = repo.addAttachment(uid, noteId, AttachmentKind.LINK, title.ifBlank { url }, "text/uri-list", null,
-            url = url, linkTitle = title, linkDescription = description)
-        refreshAttachments()
-        insertAttachmentBlock(added.id)
+    fun addLinkCard(url: String, title: String, description: String) = viewModelScope.launch {
+        updatingAttachments {
+            val added = withContext(Dispatchers.IO) {
+                storeAttachment(AttachmentKind.LINK, title.ifBlank { url }, "text/uri-list", null,
+                    url = url, title = title, description = description)
+            }
+            addAttachmentToEditor(added.id)
+        }
     }
 
-    fun removeAttachment(id: String) = viewModelScope.launch(Dispatchers.IO) {
-        withContext(Dispatchers.Main) {
+    private suspend fun updatingAttachments(action: suspend () -> Unit) = attachmentMutex.withLock {
+        _state.update { it.copy(busy = true) }
+        try {
+            if (withContext(Dispatchers.IO) { ensurePersisted() }) action()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: VaultLockedException) {
+            _events.emit(EditorEvent.VaultRequired)
+        } catch (_: Exception) {
+            _events.emit(EditorEvent.AttachmentFailed(1))
+        } finally {
+            _state.update { it.copy(busy = false) }
+        }
+    }
+
+    fun removeAttachment(id: String) = viewModelScope.launch {
+        updatingAttachments {
+            withContext(Dispatchers.IO) { saveMutex.withLock { repo.removeAttachment(uid, id) } }
             edit(coalesce = false) { s -> s.copy(blocks = s.blocks.filterNot { it is EditorBlock.Attachment && it.attachmentId == id }) }
+            refreshAttachments()
         }
-        repo.removeAttachment(uid, id); refreshAttachments()
     }
 
-    fun viewableFile(a: AttachmentEntity): File? = try {
-        repo.attachments.viewableFile(uid, a.localPath, com.example.data.repository.AttachmentStore.extensionFor(a.displayName, a.mimeType),
-            if (a.encrypted) container.keyVault.masterKey(uid) else null)
-    } catch (_: Exception) { null }
+    suspend fun viewableFile(a: AttachmentEntity): File? = withContext(Dispatchers.IO) {
+        saveMutex.withLock {
+            val attachment = repo.attachmentsFor(noteId).firstOrNull { it.id == a.id && it.userId == uid }
+                ?: return@withLock null
+            runCatching {
+                val key = if (attachment.encrypted) container.keyVault.masterKey(uid) ?: throw VaultLockedException() else null
+                val extension = AttachmentStore.extensionFor(attachment.displayName, attachment.mimeType)
+                repo.attachments.viewableFile(uid, attachment.localPath, extension, key)
+            }.getOrNull()
+        }
+    }
+
+    suspend fun exportAttachment(a: AttachmentEntity, destination: Uri): Boolean = withContext(Dispatchers.IO) {
+        saveMutex.withLock {
+            val attachment = repo.attachmentsFor(noteId).firstOrNull { it.id == a.id && it.userId == uid }
+                ?: return@withLock false
+            runCatching {
+                repo.openAttachment(uid, attachment).use { input ->
+                    val output = container.app.contentResolver.openOutputStream(destination, "wt") ?: return@withLock false
+                    output.use { input.copyTo(it) }
+                }
+                true
+            }.getOrDefault(false)
+        }
+    }
+
+    private suspend fun addAttachmentToEditor(id: String) {
+        refreshAttachments()
+        insertAttachmentBlock(id)
+    }
 
     private suspend fun refreshAttachments() {
-        _state.value = _state.value.copy(attachments = repo.attachmentsFor(noteId), persisted = true)
+        val attachments = repo.attachmentsFor(noteId)
+        _state.update { it.copy(attachments = attachments, persisted = true) }
     }
 
     // ------------------------------------------------------------------ revisions / templates
@@ -754,7 +855,7 @@ class EditorViewModel(
 
     fun restoreRevision(r: RevisionEntity, onDone: () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
         try {
-            saveNow()
+            if (!saveNow()) return@launch
             repo.restoreRevision(uid, r)
             load()
             withContext(Dispatchers.Main) { onDone() }
@@ -765,14 +866,19 @@ class EditorViewModel(
 
     /** Saves the current state as a named version (kept forever, never trimmed). */
     fun saveNamedVersion(label: String) = viewModelScope.launch(Dispatchers.IO) {
-        saveNow(force = _state.value.persisted.not())
-        repo.snapshot(noteId, com.example.data.local.RevisionReason.NAMED, label.ifBlank { "•" })
+        if (!ensurePersisted()) return@launch
+        saveMutex.withLock {
+            repo.snapshot(noteId, com.example.data.local.RevisionReason.NAMED, label.ifBlank { "•" })
+            emptyPlaceholder = false
+        }
     }
 
     fun renameVersion(id: String, label: String) = viewModelScope.launch(Dispatchers.IO) { repo.renameRevision(id, label) }
 
     fun saveAsTemplate(name: String) = viewModelScope.launch(Dispatchers.IO) {
-        repo.saveTemplate(uid, name, _state.value.toDraft(noteId).copy(isLocked = false))
+        val s = _state.value
+        if (s.loading || s.blocked != null || s.isLocked) return@launch
+        repo.saveTemplate(uid, name, s.toDraft(noteId))
     }
 
     // ------------------------------------------------------------------ saving
@@ -780,21 +886,19 @@ class EditorViewModel(
         saveJob?.cancel()
         saveJob = viewModelScope.launch(Dispatchers.IO) {
             delay(AUTOSAVE_DEBOUNCE_MS)
-            saveNow()
+            container.scope.launch { saveNow() }
         }
     }
 
-    private suspend fun ensurePersisted() {
-        if (!_state.value.persisted) saveNow(force = true)
-    }
+    private suspend fun ensurePersisted(): Boolean = saveNow(force = !_state.value.persisted)
 
     /** Writes the current draft. Encryption failures abort the write (never plaintext). */
-    suspend fun saveNow(force: Boolean = false) = saveMutex.withLock {
+    suspend fun saveNow(force: Boolean = false): Boolean = saveMutex.withLock {
         val s = _state.value
-        if (s.loading || s.blocked != null) return@withLock
-        if (!s.dirty && !force) return@withLock
+        if (s.loading || s.blocked != null) return@withLock false
+        if (!s.dirty && !force) return@withLock s.persisted
         val draft = s.toDraft(noteId)
-        if (draft.isBlank && !s.persisted && !force) return@withLock
+        if (draft.isBlank && !s.persisted && !force) return@withLock false
         try {
             val now = System.currentTimeMillis()
             if (s.persisted && (lastSnapshotAt == 0L || now - lastSnapshotAt > SNAPSHOT_INTERVAL_MS)) {
@@ -802,39 +906,55 @@ class EditorViewModel(
                 lastSnapshotAt = now
             }
             val saved = repo.save(uid, draft)
-            _state.value = _state.value.let {
-                if (it.title == s.title && it.blocks == s.blocks && it.checklist == s.checklist) it.copy(dirty = false, persisted = true, updatedAt = saved.updatedAt, createdAt = saved.createdAt)
-                else it.copy(persisted = true, createdAt = saved.createdAt)
+            if (!draft.isBlank || draft.isLocked || draft.isArchived || draft.trashedAt != null) {
+                emptyPlaceholder = false
+            } else if (!s.persisted) {
+                emptyPlaceholder = true
             }
+            _state.update { current ->
+                current.copy(
+                    dirty = current.dirty && current.toDraft(noteId) != draft,
+                    persisted = true,
+                    updatedAt = saved.updatedAt,
+                    createdAt = saved.createdAt
+                )
+            }
+            true
         } catch (e: VaultLockedException) {
             _events.tryEmit(EditorEvent.VaultRequired)
+            false
         } catch (e: CryptoException) {
             _events.tryEmit(EditorEvent.EncryptionFailed)
+            false
         }
     }
 
     /** Saves immediately on an app-wide scope (survives the screen closing). */
-    fun flush(onDone: (() -> Unit)? = null) {
+    fun flush(closing: Boolean = false, onDone: (() -> Unit)? = null) {
         saveJob?.cancel()
         container.scope.launch {
-            saveNow()
-            discardIfEmptyNew()
-            onDone?.let { withContext(Dispatchers.Main) { it() } }
-        }
-    }
-
-    private suspend fun discardIfEmptyNew() {
-        val s = _state.value
-        if (s.persisted && s.toDraft(noteId).isBlank && s.attachments.isEmpty() && s.reminderAt == null && s.trashedAt == null && !s.isLocked) {
-            val d = repo.getNote(noteId)
-            if (d != null && d.note.createdAt >= (s.createdAt ?: 0) && (System.currentTimeMillis() - d.note.createdAt) < 24 * 3600_000L && d.note.baseRemoteUpdatedAt == 0L) {
-                repo.deletePermanently(uid, noteId)
+            if (saveNow()) {
+                if (closing) discardEmptyPlaceholder()
+                onDone?.let { withContext(Dispatchers.Main) { it() } }
             }
         }
     }
 
+    private suspend fun discardEmptyPlaceholder() = saveMutex.withLock {
+        if (!emptyPlaceholder) return@withLock
+        val d = repo.getNote(noteId) ?: return@withLock
+        val n = d.note
+        if (n.baseRemoteUpdatedAt == 0L && !n.isLocked && !n.isArchived && n.trashedAt == null &&
+            n.title.isBlank() && n.body.isBlank() && d.checklist.all { it.text.isBlank() } &&
+            d.attachments.isEmpty() && d.activeReminder == null
+        ) {
+            repo.deletePermanently(uid, noteId)
+            emptyPlaceholder = false
+        }
+    }
+
     override fun onCleared() {
-        flush()
+        flush(closing = true)
         super.onCleared()
     }
 
