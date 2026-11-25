@@ -65,6 +65,6 @@
 - Block types: `text`, `toggle` (first line = heading), `callout`, `checklist`, `attachment`. `BlockType.TEXTUAL` blocks are joined into `notes.body`.
 - Editor: «/» at a line start opens the insert menu; «[[» opens the note picker; `[[Title]]` links resolve by Arabic-normalized title (`core/text/NoteLinks`); backlinks never read locked notes.
 - OCR: on-device Tesseract stays automatic; «قراءة دقيقة» sends ONE image (downscaled ≤ 2000px) to Gemini with the user's key after consent, and replaces the stored OCR text. Never for locked/encrypted attachments.
-- Scanning: if Google's scanner isn't ready, show the chooser (install module with progress / phone camera document mode then gallery / quick photo / gallery) — never a dead end.
+- Scanning (owner decision, v1.5): **no Google document scanner and no Google code scanner** (ML Kit / Play-services modules removed; they fail where Google downloads are blocked). «مسح مستند» always opens the chooser: phone camera document mode (then the gallery opens) / quick photo / gallery. Transfer QR = photo + on-device ZXing.
 - Samsung Notes `.sdocx` import is best-effort (UTF-16 text runs + media images) and always flags FORMATTING_LOST.
 - Colours: every tab and every action icon uses its Concept colour (trash = TRASH.g2, delete forever = TRASH.t2, archive = ARCHIVE, pin = SECURITY, favourite = TASKS, folder/sub-notes = FOLDERS, links = REMINDERS).

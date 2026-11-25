@@ -254,17 +254,10 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
         }
     }
     var scanFallback by remember { mutableStateOf(false) }
-    var installProgress by remember { mutableStateOf<Int?>(null) }
     // The phone's own camera app (Samsung/Xiaomi/Huawei have a «Document» mode there); when the user
     // comes back, the gallery picker opens on the newest photos so the scan can be added in one tap.
     val phoneCamera = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         runCatching { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-    }
-    val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
-        val pages = if (r.resultCode == android.app.Activity.RESULT_OK)
-            com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(r.data)?.pages.orEmpty() else emptyList()
-        if (pages.isEmpty()) scanFallback = true // cancelled, or Google's "Something went wrong" screen
-        vm.addAttachmentsFromUris(pages.map { it.imageUri }, imageHint = true)
     }
     fun launchCamera() {
         val name = "scan_${System.currentTimeMillis()}.jpg"
@@ -279,23 +272,8 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
             session.message(s.noAppToOpen)
         }
     }
-    fun startScan() {
-        val activity = context.findActivity()
-        if (activity == null) { launchCamera(); return }
-        val options = com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
-            .setGalleryImportAllowed(true).setPageLimit(20)
-            .setResultFormats(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-            .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL).build()
-        val client = runCatching { com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options) }.getOrNull()
-        if (client == null) { scanFallback = true; return }
-        scope.launch {
-            // Only open Google's scanner when its module is really installed; otherwise go straight to the camera.
-            if (!com.example.ui.platform.GmsModules.ready(context, client)) { scanFallback = true; return@launch }
-            client.getStartScanIntent(activity)
-                .addOnSuccessListener { scanLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) }
-                .addOnFailureListener { launchCamera() }
-        }
-    }
+    /** «مسح مستند»: always the chooser — phone camera (document mode), quick photo or gallery. No Google scanner. */
+    fun startScan() { scanFallback = true }
     LaunchedEffect(startScan, st.loading) { if (startScan && !st.loading) startScan() }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { recording = recorder.start(); recordSeconds = 0 } else session.message(s.micPermission)
@@ -596,19 +574,10 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
             }
         })
     if (scanFallback) ScanChooser(
-        onInstallGoogle = { scope.launch {
-            installProgress = 0
-            val client = runCatching { com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(
-                com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder().build()) }.getOrNull()
-            val ok = client != null && com.example.ui.platform.installGmsModule(context, client) { p: Int -> installProgress = p }
-            installProgress = null
-            if (ok) { scanFallback = false; startScan() } else session.message(s.googleScannerUnavailable)
-        } },
-        installProgress = installProgress,
         onPhoneCamera = { scanFallback = false; runCatching { phoneCamera.launch(android.content.Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)) }.onFailure { launchCamera() } },
         onQuickCamera = { scanFallback = false; launchCamera() },
         onGallery = { scanFallback = false; pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        onDismiss = { if (installProgress == null) scanFallback = false }
+        onDismiss = { scanFallback = false }
     )
     compareTarget?.let { id ->
         ConsentDialog(s.consentCompareBody, onSend = { remember -> vm.compareWith(id, remember); sheet = "assistant" }) { compareTarget = null }
@@ -701,9 +670,9 @@ private fun android.content.Context.findActivity(): android.app.Activity? {
 /** Compare is offered only when the assistant is set up and the note is not locked. */
 fun assistantOn(vm: EditorViewModel) = vm.assistantAvailable
 
-/** Scanning options when Google's scanner isn't available (or failed): explained, never a dead end. */
+/** Scanning options: the phone's own document mode first (Samsung/Xiaomi/Huawei), then a quick photo or the gallery. */
 @Composable
-private fun ScanChooser(onInstallGoogle: () -> Unit, installProgress: Int?, onPhoneCamera: () -> Unit, onQuickCamera: () -> Unit, onGallery: () -> Unit, onDismiss: () -> Unit) {
+private fun ScanChooser(onPhoneCamera: () -> Unit, onQuickCamera: () -> Unit, onGallery: () -> Unit, onDismiss: () -> Unit) {
     val s = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -712,19 +681,13 @@ private fun ScanChooser(onInstallGoogle: () -> Unit, installProgress: Int?, onPh
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 com.example.ui.components.ExpandableText(s.scanChooseBody, collapsedLines = 4, style = MaterialTheme.typography.bodyMedium)
-                if (installProgress != null) {
-                    Text(s.installingScanner(installProgress), style = MaterialTheme.typography.bodySmall)
-                    androidx.compose.material3.LinearProgressIndicator(progress = { installProgress / 100f }, modifier = Modifier.fillMaxWidth())
-                } else {
-                    ScanOption(s.scanOptGoogle, s.scanOptGoogleDesc, onInstallGoogle)
-                    ScanOption(s.scanOptPhoneCamera, s.scanOptPhoneCameraDesc, onPhoneCamera)
-                    ScanOption(s.scanOptQuick, s.scanOptQuickDesc, onQuickCamera)
-                    ScanOption(s.scanOptGallery, s.scanOptGalleryDesc, onGallery)
-                }
+                ScanOption(s.scanOptPhoneCamera, s.scanOptPhoneCameraDesc, onPhoneCamera)
+                ScanOption(s.scanOptQuick, s.scanOptQuickDesc, onQuickCamera)
+                ScanOption(s.scanOptGallery, s.scanOptGalleryDesc, onGallery)
             }
         },
         confirmButton = {},
-        dismissButton = { if (installProgress == null) TextButton(onClick = onDismiss) { Text(s.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } }
     )
 }
 

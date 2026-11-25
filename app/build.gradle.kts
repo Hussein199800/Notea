@@ -129,8 +129,6 @@ dependencies {
   implementation(libs.coil.svg)
   implementation(libs.tesseract4android)
   implementation(libs.zxing.core)
-  implementation(libs.mlkit.document.scanner)
-  implementation(libs.gms.code.scanner)
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.androidx.glance.appwidget)
   implementation(libs.androidx.glance.material3)

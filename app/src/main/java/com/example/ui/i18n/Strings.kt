@@ -153,11 +153,7 @@ class Strings(val isArabic: Boolean) {
     val recording = t("جارٍ التسجيل", "Recording")
     val micPermission = t("يلزم إذن الميكروفون لتسجيل الملاحظات الصوتية.", "Microphone permission is needed to record voice notes.")
     val attachments = t("المرفقات", "Attachments")
-    val scanIncompleteTitle = t("لم يكتمل المسح", "Scan didn't finish")
-    val scanIncompleteBody = t("إذا ظهرت لك رسالة «حدث خطأ ما» من خدمات Google، فماسح Google غير متاح حالياً على هذا الهاتف. يمكنك التقاط صورة بالكاميرا بدلاً منه، وسيقرأ Notea النص منها على الجهاز.",
-        "If Google services showed “Something went wrong”, Google's scanner isn't available on this phone right now. You can take a photo with the camera instead; Notea will read the text on the device.")
     val useCamera = t("التقاط بالكاميرا", "Use the camera")
-    val scannerUsingCamera = t("ماسح Google غير جاهز على هذا الهاتف، فاستخدمنا الكاميرا مباشرة.", "Google's scanner isn't ready on this phone, so the camera is used instead.")
     val qrNotFound = t("لم نجد رمز QR في الصورة. قرّب الكاميرا من الرمز أو أدخل العنوان والرمز يدوياً.", "No QR code found in the photo. Move closer to the code, or enter the address and code manually.")
     val crashTitle = t("أُغلق Notea بشكل غير متوقع", "Notea closed unexpectedly")
     val crashBody = t("ملاحظاتك محفوظة. أرسل هذا التقرير للمطوّر ليعرف السبب ويصلحه (لا يحتوي على نص ملاحظاتك).", "Your notes are safe. Send this report to the developer so the cause can be fixed (it contains no note text).")
@@ -633,17 +629,13 @@ class Strings(val isArabic: Boolean) {
 
     // Scan chooser
     val scanChooseTitle = t("كيف تريد مسح المستند؟", "How do you want to scan?")
-    val scanChooseBody = t("ماسح Google غير جاهز على هذا الهاتف. اختر طريقة، وسيقرأ Notea النص من الصورة تلقائياً.", "Google's scanner isn't ready on this phone. Pick a way; Notea reads the text from the photo automatically.")
-    val scanOptGoogle = t("تثبيت ماسح Google", "Install Google's scanner")
-    val scanOptGoogleDesc = t("تنزيل لمرة واحدة من خدمات Google، يقصّ الورقة ويعدّل ميلانها تلقائياً", "One-time download from Google services; crops and straightens pages automatically")
+    val scanChooseBody = t("اختر طريقة التصوير، وسيقرأ Notea النص من الصورة تلقائياً. للمستندات الرسمية والجداول استخدم «قراءة دقيقة» بعد إضافة الصورة.", "Pick how to capture; Notea reads the text from the photo automatically. For official documents and tables, use «Precise reading» after adding the photo.")
     val scanOptPhoneCamera = t("كاميرا الهاتف (وضع المستندات)", "Phone camera (document mode)")
     val scanOptPhoneCameraDesc = t("في سامسونج وشاومي وهواوي: اختر وضع «مستند» وصوّر، ثم ارجع وستظهر الصورة لتختارها", "On Samsung, Xiaomi and Huawei: choose «Document» mode and shoot, then come back and pick the photo")
     val scanOptQuick = t("التقاط سريع", "Quick photo")
     val scanOptQuickDesc = t("صورة مباشرة بالكاميرا تُضاف إلى الملاحظة", "Take a photo that goes straight into the note")
     val scanOptGallery = t("صورة من المعرض", "From the gallery")
     val scanOptGalleryDesc = t("صورة ممسوحة مسبقاً أو لقطة شاشة", "An already scanned image or a screenshot")
-    val installingScanner = { p: Int -> t("جارٍ تثبيت ماسح Google… ${num(p)}٪", "Installing Google's scanner… $p%") }
-    val googleScannerUnavailable = t("تعذّر تثبيت ماسح Google على هذا الهاتف (لا توجد خدمات Google أو لا اتصال). استخدم كاميرا الهاتف بوضع المستندات.", "Couldn't install Google's scanner on this phone (no Google services or no connection). Use the phone camera's document mode.")
 
     // Notion-style
     val insideNote = { t: String -> t("داخل: ${t.trim()}", "In: ${t.trim()}") }

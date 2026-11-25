@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -195,16 +196,8 @@ fun TransferScreen(session: SessionViewModel, data: DataViewModel) {
                             TransferState.Failed -> ExpandableText(s.transferFailed, collapsedLines = 3, color = MaterialTheme.colorScheme.error)
                             else -> Unit
                         }
-                        Button(onClick = {
-                            val scanner = runCatching { com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context) }.getOrNull()
-                            scope.launch {
-                                if (scanner != null && com.example.ui.platform.GmsModules.ready(context, scanner)) {
-                                    scanner.startScan()
-                                        .addOnSuccessListener { b -> connect(b.rawValue?.let { DeviceTransfer.parse(it) }) }
-                                        .addOnFailureListener { qrPhoto() }
-                                } else qrPhoto() // no Google scanner: photo + on-device decoding
-                            }
-                        }, modifier = Modifier.fillMaxWidth()) {
+                        // QR: a photo of the other phone's code, decoded on the device (no Google scanner).
+                        Button(onClick = { qrPhoto() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Rounded.QrCodeScanner, null); Spacer(Modifier.width(8.dp)); Text(s.scanQr)
                         }
                         Text(s.enterManually, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
