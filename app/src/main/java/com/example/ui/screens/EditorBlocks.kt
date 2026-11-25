@@ -155,6 +155,9 @@ private fun noteMarkdownPalette() = MarkdownEngine.Palette(
     accent = MaterialTheme.colorScheme.secondary
 )
 
+/** Opens a [[Title]] link from the reader (provided by the editor; resolves the title to a note). */
+internal val LocalNoteLinkHandler = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
+
 @Composable
 internal fun NoteReadingText(
     text: String,
@@ -162,8 +165,12 @@ internal fun NoteReadingText(
     direction: TextDirection = TextDirection.Content
 ) {
     val context = LocalContext.current
-    val rendered = remember(text, palette, context) {
-        MarkdownEngine.render(text, palette) { FileOpener.openUrl(context, it) }
+    val openNote = LocalNoteLinkHandler.current
+    val rendered = remember(text, palette, context, openNote) {
+        MarkdownEngine.render(text, palette) { target ->
+            if (target.startsWith(MarkdownEngine.NOTE_LINK_SCHEME)) openNote(target.removePrefix(MarkdownEngine.NOTE_LINK_SCHEME))
+            else FileOpener.openUrl(context, target)
+        }
     }
     SelectionContainer {
         Text(

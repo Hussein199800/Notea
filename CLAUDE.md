@@ -68,3 +68,9 @@
 - Scanning (owner decision, v1.5): **no Google document scanner and no Google code scanner** (ML Kit / Play-services modules removed; they fail where Google downloads are blocked). «مسح مستند» always opens the chooser: phone camera document mode (then the gallery opens) / quick photo / gallery. Transfer QR = photo + on-device ZXing.
 - Samsung Notes `.sdocx` import is best-effort (UTF-16 text runs + media images) and always flags FORMATTING_LOST.
 - Colours: every tab and every action icon uses its Concept colour (trash = TRASH.g2, delete forever = TRASH.t2, archive = ARCHIVE, pin = SECURITY, favourite = TASKS, folder/sub-notes = FOLDERS, links = REMINDERS).
+
+## v1.5 additions
+- Reader (read mode in the editor): `MarkdownEngine.render` — selectable, links clickable, per-paragraph `TextDirection.Content` with manual RTL/LTR. `[[Title]]` renders as a note link (`NOTE_LINK_SCHEME`, resolved by `LocalNoteLinkHandler`). Ordered markers are LTR-isolated in styled text only (`plain()` stays clean).
+- Attachments (from Codex 016bdd4): multi-select keeps order, in-app PDF reader, image/audio previews, export via the system file picker; locked previews live in app-private cache.
+- Imports: Google Keep Takeout (checklist states + attachments) via `parseFiles`; Samsung `.sdocx` handler first in the list; restoring a duplicate never touches the original; locked content is encrypted before it is persisted (`requiresEncryption`).
+- Autosave: a closing editor discards only its own empty temporary row — never a note with sub-notes, an icon, attachments or a reminder.

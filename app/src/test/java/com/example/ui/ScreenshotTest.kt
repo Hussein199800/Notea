@@ -130,7 +130,7 @@ class ScreenshotTest {
 
     private fun reader(arabic: Boolean, dark: Boolean, name: String) {
         val source = "## ملاحظات الإصدار\nEnglish release notes for **Notea 2.0**\n1. افتح [صفحة التحديث](https://example.com) من المتصفح."
-        val expected = "ملاحظات الإصدار\nEnglish release notes for Notea 2.0\n1. افتح صفحة التحديث من المتصفح."
+        val expected = "ملاحظات الإصدار\nEnglish release notes for Notea 2.0\n\u20661.\u2069 افتح صفحة التحديث من المتصفح."
         rule.setContent { Frame(arabic, dark) { Column(Modifier.padding(20.dp)) { NoteReadingText(source) } } }
         val layouts = mutableListOf<TextLayoutResult>()
         rule.onNodeWithText(expected).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }

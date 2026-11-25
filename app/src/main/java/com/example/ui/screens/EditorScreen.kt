@@ -429,7 +429,13 @@ fun EditorScreen(session: SessionViewModel, vm: EditorViewModel, folders: List<c
                         }
                     )
                     MetaLine(st, folders)
-                    BlocksContent(vm, st, readOnly, readingDirection.direction)
+                    androidx.compose.runtime.CompositionLocalProvider(LocalNoteLinkHandler provides { title ->
+                        val key = com.example.core.text.NoteLinks.key(title)
+                        val target = graph.all.firstOrNull { com.example.core.text.NoteLinks.key(it.title) == key }
+                        if (target != null) { vm.flush(); onOpenNote(target.id) } else session.message(s.noteNotFound(title))
+                    }) {
+                        BlocksContent(vm, st, readOnly, readingDirection.direction)
+                    }
                     if (!st.isLocked) NoteGraphSection(graph, readOnly, onOpen = { id -> vm.flush(); onOpenNote(id) },
                         onNewChild = { vm.createChild { id -> onOpenNote(id) } },
                         onCreateLinked = { t -> vm.createLinked(t) })

@@ -640,6 +640,7 @@ class Strings(val isArabic: Boolean) {
     // Notion-style
     val insideNote = { t: String -> t("داخل: ${t.trim()}", "In: ${t.trim()}") }
     val subNotes = t("الملاحظات الفرعية", "Sub-notes")
+    val noteNotFound = { n: String -> t("لا توجد ملاحظة باسم «${n}». أنشئها من «روابط في هذه الملاحظة».", "No note named “$n”. Create it from “Links in this note”.") }
     val subNotesCount = { n: Int -> if (isArabic) countAr(n, "ملاحظة فرعية واحدة", "ملاحظتان فرعيتان", "ملاحظات فرعية", "ملاحظة فرعية") else if (n == 1) "1 sub-note" else "$n sub-notes" }
     val newSubNote = t("ملاحظة فرعية", "Sub-note")
     val linksFromNote = t("روابط في هذه الملاحظة", "Links in this note")

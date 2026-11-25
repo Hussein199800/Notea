@@ -946,7 +946,9 @@ class EditorViewModel(
         val n = d.note
         if (n.baseRemoteUpdatedAt == 0L && !n.isLocked && !n.isArchived && n.trashedAt == null &&
             n.title.isBlank() && n.body.isBlank() && d.checklist.all { it.text.isBlank() } &&
-            d.attachments.isEmpty() && d.activeReminder == null
+            d.attachments.isEmpty() && d.activeReminder == null && n.icon.isBlank() &&
+            // A blank page that already holds sub-notes is kept (its children would lose their parent).
+            container.db.noteDao().getAllWithDetails(uid).none { it.note.parentId == noteId && !it.note.deleted }
         ) {
             repo.deletePermanently(uid, noteId)
             emptyPlaceholder = false

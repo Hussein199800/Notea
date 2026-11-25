@@ -149,6 +149,16 @@ class EditorPersistenceTest {
         assertEquals("Task", restored.checklist.single().text)
     }
 
+    @Test fun closingABlankPageThatHoldsSubNotesKeepsIt() = runBlocking {
+        val parentId = Ids.newId()
+        val store = ViewModelStore()
+        val parent = openEditor(store, parentId)
+        assertTrue(parent.saveNow(force = true))          // blank temporary row, as when «sub-note» is tapped first
+        repository.save(LOCAL_UID, NoteDraft(Ids.newId(), title = "Child", parentId = parentId))
+        closeEditor(store)
+        assertNotNull(repository.getNote(parentId))       // not discarded: a child points to it
+    }
+
     private suspend fun openEditor(store: ViewModelStore, id: String): EditorViewModel {
         val factory = viewModelFactory { initializer { EditorViewModel(container, LOCAL_UID, id) } }
         return ViewModelProvider(store, factory)[EditorViewModel::class.java].also { editor ->

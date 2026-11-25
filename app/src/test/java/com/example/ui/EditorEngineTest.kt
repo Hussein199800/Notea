@@ -67,4 +67,22 @@ class EditorEngineTest {
         assertEquals("ab", h.undo()); assertEquals("", h.undo()); assertNull(h.undo())
         assertEquals("ab", h.redo()); assertEquals("abc", h.redo()); assertFalse(h.canRedo)
     }
+
+    @Test fun reader_noteLinksShowTitle_andReportNoteScheme() {
+        val p = MarkdownEngine.Palette(Color.Gray, Color.Blue, Color.Gray, Color.Green)
+        val clicked = mutableListOf<String>()
+        val out = MarkdownEngine.render("راجع [[خطة العمل]] اليوم", p) { clicked += it }
+        assertEquals("راجع خطة العمل اليوم", out.text)
+        val link = out.getLinkAnnotations(0, out.length).single().item as LinkAnnotation.Clickable
+        assertEquals(MarkdownEngine.NOTE_LINK_SCHEME + "خطة العمل", link.tag)
+        link.linkInteractionListener!!.onClick(link)
+        assertEquals(listOf(MarkdownEngine.NOTE_LINK_SCHEME + "خطة العمل"), clicked)
+        assertEquals("راجع خطة العمل اليوم", MarkdownEngine.plain("راجع [[خطة العمل]] اليوم"))
+    }
+
+    @Test fun reader_orderedMarkerIsIsolatedInStyledTextOnly() {
+        val p = MarkdownEngine.Palette(Color.Gray, Color.Blue, Color.Gray, Color.Green)
+        assertEquals("\u20661.\u2069 افتح", MarkdownEngine.render("1. افتح", p).text)
+        assertEquals("1. افتح", MarkdownEngine.plain("1. افتح"))
+    }
 }

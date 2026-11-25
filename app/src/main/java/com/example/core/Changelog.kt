@@ -9,6 +9,27 @@ object Changelog {
 
     val releases = listOf(
         Release(
+            "1.5", "2026-11-25",
+            ar = listOf(
+                "وضع قراءة: نص قابل للتحديد، روابط تُفتح بلمسة، اتجاه تلقائي لكل فقرة مع خيار يمين لليسار أو يسار لليمين",
+                "روابط [[ ]] تفتح الملاحظة المرتبطة مباشرة من وضع القراءة",
+                "المرفقات: ترتيب الاختيار محفوظ، قارئ PDF داخل التطبيق بتنقّل بين الصفحات وتكبير، معاينة الصور والصوت، وحفظ نسخة عبر منتقي الملفات",
+                "استيراد Google Keep من Takeout مع حالة عناصر القوائم والمرفقات، ومسار Samsung Notes كما هو",
+                "الاستيراد والاستعادة لا يغيّران الملاحظة الأصلية عند التكرار، والمحتوى المقفل يُشفَّر قبل حفظه",
+                "حفظ تلقائي أدق: التعديل أثناء الحفظ يُسجَّل، وتفريغ ملاحظة موجودة لا يحذفها، وتغيير ترتيب الكتل وحده يُنشئ إصداراً",
+                "إزالة ماسح Google بالكامل: «مسح مستند» يفتح كاميرا الهاتف بوضع المستندات أو التقاطاً سريعاً أو المعرض، ورمز QR يُقرأ من صورة على الهاتف"
+            ),
+            en = listOf(
+                "Reading mode: selectable text, tappable links, automatic per-paragraph direction with manual RTL/LTR",
+                "[[ ]] links open the linked note right from reading mode",
+                "Attachments: selection order kept, in-app PDF reader with page navigation and zoom, image and audio previews, save a copy via the file picker",
+                "Google Keep import from Takeout with checklist states and attachments; the Samsung Notes path is unchanged",
+                "Importing or restoring a duplicate leaves the original note intact; locked content is encrypted before it is stored",
+                "More precise autosave: edits during a save are kept, emptying an existing note doesn't delete it, and reordering blocks alone creates a version",
+                "Google's scanner removed entirely: «Scan document» opens the phone camera's document mode, a quick photo or the gallery; transfer QR codes are read from a photo on the device"
+            )
+        ),
+        Release(
             "1.4.1", "2026-11-09",
             ar = listOf(
                 "تسجيل الدخول بحساب Google ومزامنة ملاحظاتك تلقائياً بين أجهزتك",

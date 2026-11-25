@@ -169,7 +169,8 @@ object MarkdownEngine {
                     val (indent, marker) = listItem.destructured
                     out.append(indent)
                     val markerStart = out.length
-                    out.append(if (marker.length == 1) "•" else marker)
+                    // Ordered markers ("1.") are isolated as LTR so Arabic paragraphs show "1." and not ".1".
+                    out.append(if (marker.length == 1) "•" else if (palette != null) "\u2066$marker\u2069" else marker)
                     if (palette != null) out.addStyle(SpanStyle(color = palette.accent, fontWeight = FontWeight.Bold), markerStart, out.length)
                     out.append(' ')
                     listItem.value.length
