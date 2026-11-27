@@ -99,6 +99,18 @@ fun noteaBaseCode(v: String): Int {
   return p[0] * 10000 + p[1] * 100 + p[2]
 }
 
+val robolectricRuntime: Configuration by configurations.creating { isTransitive = false }
+val robolectricDepsDir = layout.buildDirectory.dir("robolectric-deps")
+val copyRobolectricDeps = tasks.register<Copy>("copyRobolectricDeps") {
+  from(robolectricRuntime)
+  into(robolectricDepsDir)
+}
+tasks.withType<Test>().configureEach {
+  dependsOn(copyRobolectricDeps)
+  systemProperty("robolectric.offline", "true")
+  systemProperty("robolectric.dependency.dir", robolectricDepsDir.get().asFile.absolutePath)
+}
+
 ksp {
   arg("room.schemaLocation", "$projectDir/schemas")
   arg("room.generateKotlin", "true")
@@ -156,6 +168,9 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
+  // Robolectric's Android runtime is resolved by Gradle (cached, retried) instead of being fetched by
+  // the tests at run time, which fails on CI when Maven Central drops the connection.
+  robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-13954326-i7")
 }
 
 tasks.withType<Test> {
